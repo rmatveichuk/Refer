@@ -20,12 +20,11 @@ class ScraperSignals(QObject):
 
 class ScraperManager(QRunnable):
     """
-    Оркестратор парсинга. Работает в QThreadPool.
-    1. Инициирует парсинг определенного сайта/страницы.
+    Оркестратор загрузки данных. Работает в QThreadPool.
+    1. Инициирует загрузку определенного сайта/страницы.
     2. Скачивает оригиналы картинок.
     3. Создает WebP превью (1024px) и вычисляет pHash.
     4. Если pHash уникальный -> сохраняет в SQLite и делает pyqtSignal(Asset).
-    Если не уникальный -> Delta Logic (можно передать сигнал парсеру остановиться).
     """
 
     def __init__(self, parser_class, url: str, db_manager: DatabaseManager, category: str = "3d_render", max_images_per_project: int = 5):
@@ -71,7 +70,7 @@ class ScraperManager(QRunnable):
             self._scraper_instance.cancel()
 
     def run(self):
-        logger.info(f"Starting scraper for: {self.url}")
+        logger.info(f"Starting ingestion for: {self.url}")
 
         # Передаем db_path в парсер для проверки дубликатов
         import config

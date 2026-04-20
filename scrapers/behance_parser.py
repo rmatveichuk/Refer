@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class BehanceParser:
     """
-    Универсальный парсер Behance (облегченная версия).
+    Универсальный загрузчик Behance (облегченная версия).
 
     Работает только по URL:
     1. Профили пользователей (https://www.behance.net/username)
@@ -52,7 +52,7 @@ class BehanceParser:
     def cancel(self):
         """Signals the parser to stop."""
         self._is_cancelled = True
-        logger.info("⛔ Cancellation requested - stopping scrape...")
+        logger.info("⛔ Cancellation requested - stopping load...")
 
     def _upgrade_to_best_quality(self, img_url: str) -> str:
         """
@@ -90,7 +90,7 @@ class BehanceParser:
 
     def run(self):
         if self.is_project:
-            logger.info(f"Detected project URL - scraping project: {self.start_url}")
+            logger.info(f"Detected project URL - loading project: {self.start_url}")
             # Извлекаем ID проекта из URL
             match = re.search(r"/gallery/(\d+)", self.start_url)
             if match:
@@ -98,11 +98,11 @@ class BehanceParser:
             else:
                 logger.error("Could not extract project ID from URL.")
         elif "/search/" in self.start_url:
-            logger.info(f"Detected search URL - scraping results: {self.start_url}")
+            logger.info(f"Detected search URL - loading results: {self.start_url}")
             self._scrape_profile("search_results")
         else:
             username = self.start_url.split("/")[-1]
-            logger.info(f"Detected profile URL - scraping user: {username}")
+            logger.info(f"Detected profile URL - loading user: {username}")
             self._scrape_profile(username)
 
     def _fetch_project_images(self, project_id: str, author: str = "unknown"):

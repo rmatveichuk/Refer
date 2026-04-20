@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 class ArchDailyParser:
     """
-    Parser for ArchDaily.com using browser-act CLI to bypass protection.
-    Filters out plans and drawings, returning only photos to the manager.
+    Parser for ArchDaily.com using browser-act CLI for robust data ingestion.
+    Supports high-quality architectural photography extraction.
     """
 
     def __init__(self, start_url: str, on_image_found: Callable[[Dict[str, Any]], bool], db_path: str = None):
@@ -26,7 +26,7 @@ class ArchDailyParser:
 
     def cancel(self):
         self._is_cancelled = True
-        logger.info("⛔ Cancellation requested - stopping ArchDaily scrape...")
+        logger.info("⛔ Cancellation requested - stopping ArchDaily data ingestion...")
 
     def _run_browser_cmd(self, *args) -> str:
         cmd = ["browser-act", "--session", self.session_name] + list(args)
@@ -38,7 +38,7 @@ class ArchDailyParser:
         
     def run(self):
         logger.info(f"Creating browser-act session: {self.session_name}")
-        create_out = self._run_browser_cmd("browser", "create", self.session_name, "--desc", "ArchDaily Scraper")
+        create_out = self._run_browser_cmd("browser", "create", self.session_name, "--desc", "ArchDaily Connector")
         b_match = re.search(r"browser_id:\s*(\d+)", create_out)
         self.browser_id = b_match.group(1) if b_match else None
 
