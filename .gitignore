@@ -1,0 +1,33 @@
+# Виртуальное окружение
+.venv/
+venv/
+ENV/
+
+# Данные приложения (База данных и картинки)
+app_data/
+*.db
+storage.db
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+.qwen/
+.agents/
+
+# Локальные переменные окружения
+.env
+
+# Временные файлы системы
+Thumbs.db
+Desktop.ini
+
+# Временные данные и отчеты
+*.json
+*.txt
+!requirements.txt
+!README.md

@@ -1,0 +1,12 @@
+PyQt6
+sentence-transformers
+argostranslate
+curl_cffi==0.15.0
+Pillow>=11.2.1
+torch
+torchvision
+faiss-cpu==1.8.0
+numpy==1.26.4
+imagehash
+requests
+
