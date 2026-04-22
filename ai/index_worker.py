@@ -29,49 +29,51 @@ class SigLipIndexWorker(QRunnable):
     def run(self):
         total = len(self.asset_ids)
         indexed_count = 0
-        batch_size = 32 # Увеличиваем размер батча для RTX 4060, так как память разгружена
+        batch_size = 64  # Увеличиваем батч для RTX 4060
+        bulk_fetch_size = 512 # Подгружаем пути сразу для 512 ассетов
         
         try:
-            current_batch_paths = []
-            current_batch_ids = []
-            
-            for i, asset_id in enumerate(self.asset_ids):
+            for start_idx in range(0, total, bulk_fetch_size):
                 if self._is_cancelled:
                     break
                 
-                # Fetch thumbnail path
+                end_idx = min(start_idx + bulk_fetch_size, total)
+                chunk_ids = self.asset_ids[start_idx:end_idx]
+                
+                # Fetch thumbnail paths in one query for the chunk
+                paths_map = {}
                 with self.db.get_connection() as conn:
                     cur = conn.cursor()
-                    cur.execute("SELECT thumbnail_path FROM assets WHERE id = ?", (asset_id,))
-                    row = cur.fetchone()
+                    placeholders = ",".join(["?"] * len(chunk_ids))
+                    cur.execute(f"SELECT id, thumbnail_path FROM assets WHERE id IN ({placeholders})", chunk_ids)
+                    for row in cur.fetchall():
+                        if row['thumbnail_path'] and Path(row['thumbnail_path']).exists():
+                            paths_map[row['id']] = row['thumbnail_path']
                 
-                if not row or not row['thumbnail_path']:
-                    continue
+                # Process the chunk in smaller batches for AI inference
+                chunk_ids_with_paths = [aid for aid in chunk_ids if aid in paths_map]
                 
-                thumb_path = row['thumbnail_path']
-                if not Path(thumb_path).exists():
-                    continue
-                
-                current_batch_paths.append(thumb_path)
-                current_batch_ids.append(asset_id)
-                
-                if len(current_batch_paths) >= batch_size or i == total - 1:
+                for i in range(0, len(chunk_ids_with_paths), batch_size):
+                    if self._is_cancelled:
+                        break
+                        
+                    batch_ids = chunk_ids_with_paths[i:i + batch_size]
+                    batch_paths = [paths_map[aid] for aid in batch_ids]
+                    
                     # Generate embeddings batch
-                    vectors = self.ai.get_image_embeddings_batch(current_batch_paths)
+                    vectors = self.ai.get_image_embeddings_batch(batch_paths)
                     
                     # Add to FAISS
-                    self.faiss_mgr.add_vectors_batch(current_batch_ids, vectors)
+                    self.faiss_mgr.add_vectors_batch(batch_ids, vectors)
                     
                     # Update DB
-                    self.db.set_embedding_ids_batch(current_batch_ids)
+                    self.db.set_embedding_ids_batch(batch_ids)
                     
-                    indexed_count += len(current_batch_ids)
-                    self.signals.progress.emit(i + 1, total, f"Indexing #{asset_id} (batch)")
+                    indexed_count += len(batch_ids)
+                    self.signals.progress.emit(start_idx + i + len(batch_ids), total, f"Indexing batch ({indexed_count}/{total})")
                     
-                    current_batch_paths = []
-                    current_batch_ids = []
-                    
-                    if indexed_count % (batch_size * 5) == 0:
+                    # Сохраняем индекс каждые 512 векторов, чтобы не потерять прогресс
+                    if indexed_count % 512 == 0:
                         self.faiss_mgr.save_index()
 
             self.faiss_mgr.save_index()

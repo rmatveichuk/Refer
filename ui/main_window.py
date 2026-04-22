@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self.active_scraper = None
         self.active_indexer = None
         self.active_searcher = None
+        self.ai_initializing = False  # Флаг для предотвращения двойной инициализации
         self.current_category = "All"
         self.search_threshold = 0.6
         self.search_sources = []
@@ -55,7 +56,12 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(500, self._background_ai_init)
 
     def _background_ai_init(self):
+        if self.ai or self.ai_initializing:
+            return
+            
+        self.ai_initializing = True
         self.status_label.setText("⏳ Инициализация AI (в фоне)...")
+        
         class InitWorker(QRunnable):
             def __init__(self, parent):
                 super().__init__()
@@ -69,6 +75,8 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logger.error(f"Background AI init failed: {e}")
                     self.parent.status_label.setText("❌ Ошибка AI")
+                finally:
+                    self.parent.ai_initializing = False
 
         worker = InitWorker(self)
         QThreadPool.globalInstance().start(worker)
@@ -181,7 +189,7 @@ class MainWindow(QMainWindow):
             cur = conn.cursor()
             cur.execute("SELECT id, thumbnail_path FROM assets")
             assets = cur.fetchall()
-
+ 
         missing_count = 0
         from pathlib import Path
         for asset_id, thumbnail_path in assets:
@@ -488,14 +496,25 @@ class MainWindow(QMainWindow):
     # === AI SigLIP ===
 
     def _ensure_ai(self):
-        if self.ai is None:
-            self.status_label.setText("⏳ Загрузка SigLIP AI...")
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            from ai.engine import AiEngine
-            try:
-                self.ai = AiEngine()
-            finally:
-                QApplication.restoreOverrideCursor()
+        if self.ai is not None:
+            return self.ai
+            
+        if self.ai_initializing:
+            # Ждем завершения фоновой инициализации, если она идет
+            import time
+            while self.ai_initializing:
+                QApplication.processEvents()
+                time.sleep(0.1)
+            return self.ai
+
+        # Если инициализация еще не начиналась или упала, запускаем синхронно
+        self.status_label.setText("⏳ Загрузка SigLIP AI...")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        from ai.engine import AiEngine
+        try:
+            self.ai = AiEngine()
+        finally:
+            QApplication.restoreOverrideCursor()
         return self.ai
 
     def start_indexing(self):
