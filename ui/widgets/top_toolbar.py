@@ -57,7 +57,7 @@ class TopToolbar(QWidget):
 
         # --- Right Block: Typing, Adding, Sync ---
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["All", "References", "Textures", "3D Models"])
+        self.type_combo.addItems(["All", "Textures", "3D Models"])
         self.type_combo.currentIndexChanged.connect(lambda: self.category_changed.emit(self.type_combo.currentText()))
 
         self.btn_add_folder = QPushButton("+ Add Folder")

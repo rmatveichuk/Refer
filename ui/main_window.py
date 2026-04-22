@@ -15,8 +15,10 @@ from database.models import Asset
 from scrapers.manager import ScraperManager
 from scrapers.behance_parser import BehanceParser
 from scrapers.archdaily_parser import ArchDailyParser
+from scrapers.local_folder import LocalFolderParser
 from database.faiss_manager import FaissManager
 from ui.settings_dialog import SettingsDialog
+from PyQt6.QtWidgets import QFileDialog
 import config
 
 import sqlite3
@@ -45,6 +47,7 @@ class MainWindow(QMainWindow):
         self.search_sources = []
         
         self._init_ui()
+        self.update_sources_panel()
         self._load_assets_for_gallery()
         self._refresh_library()
         
@@ -197,8 +200,43 @@ class MainWindow(QMainWindow):
         self.current_category = category
         self._load_assets_for_gallery()
 
+    def update_sources_panel(self):
+        # Эта функция будет вызываться, чтобы обновить чекбоксы в SearchPanel
+        # Получаем уникальные папки из БД
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT domain FROM sources WHERE domain LIKE '_:%' OR domain LIKE '/%'")
+            rows = cur.fetchall()
+            custom_folders = [row['domain'] for row in rows]
+            
+        self.search_panel.update_custom_folders(custom_folders)
+
     def _add_folder(self):
-        QMessageBox.information(self, "Функция в разработке", "Логика поиска по папкам будет добавлена позже.")
+        folder_path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
+        if folder_path:
+            self.top_toolbar.set_scraping_state(True)
+            self.status_label.setText(f"Сканирование: {folder_path}")
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setRange(0, 0)
+            
+            # Если уже что-то скрапится, мы заменяем воркер. 
+            # Для надежности можно было бы сделать пул парсеров, 
+            # но пока используем active_scraper
+            if self.active_scraper:
+                self.active_scraper.cancel()
+                
+            self.active_scraper = LocalFolderParser(folder_path, self.db)
+            self.active_scraper.signals.asset_processed.connect(self.on_new_asset)
+            self.active_scraper.signals.progress.connect(self._on_local_folder_progress)
+            self.active_scraper.signals.finished.connect(self.on_scrape_finished)
+            self.active_scraper.signals.error.connect(self.on_scrape_error)
+            QThreadPool.globalInstance().start(self.active_scraper)
+
+    @pyqtSlot(int, int, str)
+    def _on_local_folder_progress(self, current: int, total: int, info: str):
+        self.progress_bar.setMaximum(total)
+        self.progress_bar.setValue(current)
+        self.status_label.setText(f"Сканирование [{current}/{total}]: {info}")
 
     def _load_assets_for_gallery(self):
         with self.db.get_connection() as conn:
@@ -210,9 +248,7 @@ class MainWindow(QMainWindow):
             params = []
 
             # Categories filtering based on current_category
-            if self.current_category == "References":
-                conditions.append("category = 'photography'")
-            elif self.current_category == "3D Models":
+            if self.current_category == "3D Models":
                 conditions.append("category = '3d_render'")
             # Add custom if needed
             
@@ -376,6 +412,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Готово")
         self.progress_bar.setVisible(False)
         self._refresh_library()
+        self.update_sources_panel()
 
     @pyqtSlot(str, str)
     def on_scrape_error(self, url, error):
@@ -540,22 +577,26 @@ class MainWindow(QMainWindow):
 
         # Фильтруем по источникам
         allowed_domains = []
-        allow_custom = False
-        if 'archdaily' in self.search_sources:
-            allowed_domains.append('archdaily.com')
-        if 'behance' in self.search_sources:
-            allowed_domains.append('behance.net')
-        if 'custom' in self.search_sources:
-            allow_custom = True
+        custom_folder_domains = []
+
+        for src in self.search_sources:
+            if src == 'archdaily':
+                allowed_domains.append('archdaily.com')
+            elif src == 'behance':
+                allowed_domains.append('behance.net')
+            else:
+                # Это локальная папка
+                custom_folder_domains.append(src)
 
         with self.db.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             
             allowed_source_ids = []
-            if allowed_domains:
-                domain_placeholders = ','.join('?' for _ in allowed_domains)
-                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", allowed_domains)
+            if allowed_domains or custom_folder_domains:
+                all_domains = allowed_domains + custom_folder_domains
+                domain_placeholders = ','.join('?' for _ in all_domains)
+                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", all_domains)
                 allowed_source_ids = [row['id'] for row in cur.fetchall()]
 
             placeholders = ','.join('?' for _ in asset_ids)
@@ -568,8 +609,6 @@ class MainWindow(QMainWindow):
                 src_placeholders = ','.join('?' for _ in allowed_source_ids)
                 source_conditions.append(f"source_id IN ({src_placeholders})")
                 params.extend(allowed_source_ids)
-            if allow_custom:
-                source_conditions.append("source_id IS NULL OR source_id NOT IN (SELECT id FROM sources WHERE domain IN ('archdaily.com', 'behance.net'))")
 
             if source_conditions:
                 query += " AND (" + " OR ".join(source_conditions) + ")"

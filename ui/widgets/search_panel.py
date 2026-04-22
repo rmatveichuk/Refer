@@ -109,14 +109,42 @@ class SearchPanel(QWidget):
         self.chk_archdaily = QCheckBox("ArchDaily")
         self.chk_archdaily.setChecked(True)
         self.chk_behance = QCheckBox("Behance")
-        self.chk_custom = QCheckBox("Пользовательские папки")
-        self.chk_custom.setChecked(True)
-
+        
         main_layout.addWidget(self.chk_archdaily)
         main_layout.addWidget(self.chk_behance)
-        main_layout.addWidget(self.chk_custom)
+
+        # Dynamic Custom Folders
+        self.folders_layout = QVBoxLayout()
+        self.folders_layout.setContentsMargins(0, 0, 0, 0)
+        self.folders_layout.setSpacing(5)
+        self.folder_checkboxes = {} # {folder_path: QCheckBox}
+        
+        main_layout.addLayout(self.folders_layout)
 
         main_layout.addStretch(1)
+
+    def update_custom_folders(self, folders: list):
+        # Remove old checkboxes
+        for i in reversed(range(self.folders_layout.count())): 
+            widget = self.folders_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.deleteLater()
+        
+        self.folder_checkboxes.clear()
+        
+        # Add new checkboxes
+        import os
+        for folder in folders:
+            # Показываем только имя папки для красоты, но храним полный путь
+            folder_name = os.path.basename(folder.rstrip('\\/'))
+            if not folder_name:
+                folder_name = folder # fallback (e.g. "C:\")
+                
+            chk = QCheckBox(f"📁 {folder_name}")
+            chk.setChecked(True)
+            chk.setToolTip(folder)
+            self.folders_layout.addWidget(chk)
+            self.folder_checkboxes[folder] = chk
 
     def _emit_search(self):
         text = self.hybrid_input.text_input.text().strip()
@@ -126,7 +154,10 @@ class SearchPanel(QWidget):
         sources = []
         if self.chk_archdaily.isChecked(): sources.append('archdaily')
         if self.chk_behance.isChecked(): sources.append('behance')
-        if self.chk_custom.isChecked(): sources.append('custom')
+        
+        for folder_path, chk in self.folder_checkboxes.items():
+            if chk.isChecked():
+                sources.append(folder_path)
 
         self.search_triggered.emit(text, img_path, threshold, sources)
 
@@ -145,5 +176,6 @@ class SearchPanel(QWidget):
         self.slider_sens.setValue(60)
         self.chk_archdaily.setChecked(True)
         self.chk_behance.setChecked(False)
-        self.chk_custom.setChecked(True)
+        for chk in self.folder_checkboxes.values():
+            chk.setChecked(True)
         self.clear_triggered.emit()

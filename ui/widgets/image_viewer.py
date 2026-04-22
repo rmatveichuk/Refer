@@ -128,6 +128,10 @@ class ImageViewerWindow(QMainWindow):
         self.btn_open_url.clicked.connect(self._open_in_browser)
         toolbar.addWidget(self.btn_open_url)
 
+        self.btn_open_folder = QPushButton("📁 В папке")
+        self.btn_open_folder.clicked.connect(self._open_in_folder)
+        toolbar.addWidget(self.btn_open_folder)
+
         # Статус-бар
         self.status = QStatusBar()
         self.setStatusBar(self.status)
@@ -186,6 +190,34 @@ class ImageViewerWindow(QMainWindow):
         from PyQt6.QtGui import QDesktopServices
         from PyQt6.QtCore import QUrl
         QDesktopServices.openUrl(QUrl(self.assets[self.current_index].original_url))
+
+    def _open_in_folder(self):
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+        import subprocess
+        import platform
+        import os
+        from urllib.parse import urlparse
+        
+        asset = self.assets[self.current_index]
+        
+        # Если это локальный путь (начинается с file:/// или просто путь)
+        path = asset.original_url
+        if path.startswith('file:///'):
+            path = path[8:]
+        
+        # На всякий случай нормализуем путь для Windows
+        path = os.path.normpath(path)
+            
+        if os.path.exists(path):
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', '/select,', path])
+            elif platform.system() == "Darwin": # macOS
+                subprocess.run(['open', '-R', path])
+            else: # Linux
+                subprocess.run(['xdg-open', os.path.dirname(path)])
+        else:
+            logger.warning(f"Файл не найден на диске: {path}")
 
     def showEvent(self, event):
         super().showEvent(event)
