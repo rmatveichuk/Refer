@@ -234,6 +234,14 @@ class DatabaseManager:
             conn.execute("UPDATE assets SET embedding_id = ? WHERE id = ?", (embedding_id, asset_id))
             conn.commit()
 
+    def set_embedding_ids_batch(self, asset_ids: List[int]):
+        """Associates FAISS embedding IDs with multiple assets (ID = ID)."""
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            data = [(aid, aid) for aid in asset_ids]
+            cur.executemany("UPDATE assets SET embedding_id = ? WHERE id = ?", data)
+            conn.commit()
+
     def get_unindexed_assets(self) -> List[int]:
         """Returns IDs of assets that have thumbnails but no embedding_id."""
         with self.get_connection() as conn:

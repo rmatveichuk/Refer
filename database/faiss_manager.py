@@ -39,17 +39,24 @@ class FaissManager:
         self.add_vector_no_save(asset_id, vector)
         self.save_index()
 
+    def add_vectors_batch(self, asset_ids: list[int], vectors: np.ndarray):
+        """Adds a batch of vectors linked to SQLite asset_ids without saving."""
+        vectors = np.asarray(vectors, dtype=np.float32)
+        if len(vectors.shape) == 1:
+            vectors = np.expand_dims(vectors, axis=0)
+
+        if vectors.shape[1] != self.dimension:
+            raise ValueError(f"Expected dimension {self.dimension}, got {vectors.shape[1]}")
+            
+        if len(asset_ids) != vectors.shape[0]:
+            raise ValueError(f"Mismatch: {len(asset_ids)} IDs for {vectors.shape[0]} vectors")
+
+        id_array = np.array(asset_ids, dtype=np.int64)
+        self.index.add_with_ids(vectors, id_array)
+
     def add_vector_no_save(self, asset_id: int, vector: np.ndarray):
         """Adds a single vector without saving. Use for batch operations."""
-        vector = np.asarray(vector, dtype=np.float32)
-        if len(vector.shape) == 1:
-            vector = np.expand_dims(vector, axis=0)
-
-        if vector.shape[1] != self.dimension:
-            raise ValueError(f"Expected dimension {self.dimension}, got {vector.shape[1]}")
-
-        id_array = np.array([asset_id], dtype=np.int64)
-        self.index.add_with_ids(vector, id_array)
+        self.add_vectors_batch([asset_id], vector)
 
     def search(self, query_vector: np.ndarray, k: int = 10) -> tuple[np.ndarray, np.ndarray]:
         """Searches for k nearest neighbors."""

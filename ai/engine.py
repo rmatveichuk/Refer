@@ -14,9 +14,14 @@ class AiEngine:
     def __init__(self):
         logger.info(f"Initializing AiEngine with model: {config.SIGLIP_MODEL}")
         
-        # Load SigLIP model via Transformers (more stable than sentence-transformers for SigLIP)
+        # Load SigLIP model via Transformers
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = AutoModel.from_pretrained(config.SIGLIP_MODEL, low_cpu_mem_usage=False).to(self.device).eval()
+        
+        # Для RTX 4060 используем bfloat16 или float16 для радикального ускорения, если доступна CUDA
+        self.dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else (torch.float16 if torch.cuda.is_available() else torch.float32)
+        
+        # Загружаем модель сразу в нужном типе данных для экономии VRAM и скорости
+        self.model = AutoModel.from_pretrained(config.SIGLIP_MODEL, torch_dtype=self.dtype).to(self.device).eval()
         self.processor = AutoProcessor.from_pretrained(config.SIGLIP_MODEL, use_fast=True)
         
         # Initialize Translation (RU -> EN)
@@ -70,23 +75,25 @@ class AiEngine:
         try:
             inputs = self.processor(text=[english_text], return_tensors="pt", padding="max_length").to(self.device)
             with torch.no_grad():
-                text_features = self.model.get_text_features(**inputs)
+                with torch.amp.autocast('cuda', dtype=self.dtype):
+                    text_features = self.model.get_text_features(**inputs)
             
             # Normalize and convert to numpy
             text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
-            return text_features.cpu().numpy().flatten()
+            return text_features.cpu().float().numpy().flatten()
         except Exception as e:
             logger.error(f"Failed to embed text: {e}")
             return np.zeros(config.VECTOR_DIMENSION)
 
     def get_image_embedding(self, image_path: str) -> np.ndarray:
-        """Генерирует вектор для изображения."""
+        """Генерирует вектор для одного изображения."""
         try:
             img = Image.open(image_path).convert("RGB")
-            inputs = self.processor(images=img, return_tensors="pt").to(self.device)
+            inputs = self.processor(images=img, return_tensors="pt").to(self.device, dtype=self.dtype)
             
             with torch.no_grad():
-                image_features = self.model.get_image_features(**inputs)
+                with torch.amp.autocast('cuda', dtype=self.dtype):
+                    image_features = self.model.get_image_features(**inputs)
             
             # Normalize and convert to numpy
             image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
@@ -94,3 +101,42 @@ class AiEngine:
         except Exception as e:
             logger.error(f"Failed to embed image {image_path}: {e}")
             return np.zeros(config.VECTOR_DIMENSION)
+
+    def get_image_embeddings_batch(self, image_paths: list[str]) -> np.ndarray:
+        """Генерирует векторы для списка изображений (батчинг)."""
+        valid_images = []
+        valid_indices = []
+        
+        for i, path in enumerate(image_paths):
+            try:
+                img = Image.open(path).convert("RGB")
+                valid_images.append(img)
+                valid_indices.append(i)
+            except Exception as e:
+                logger.warning(f"Failed to load image {path} for batch: {e}")
+
+        if not valid_images:
+            return np.zeros((len(image_paths), config.VECTOR_DIMENSION))
+
+        try:
+            inputs = self.processor(images=valid_images, return_tensors="pt").to(self.device, dtype=self.dtype)
+            
+            with torch.no_grad():
+                with torch.amp.autocast('cuda', dtype=self.dtype):
+                    image_features = self.model.get_image_features(**inputs)
+            
+            # Normalize and convert to numpy
+            image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
+            batch_vectors = image_features.cpu().numpy()
+            
+            # Если какие-то картинки не загрузились, нужно вернуть массив правильного размера
+            # с нулями для битых картинок, чтобы не сбить соответствие ID
+            result = np.zeros((len(image_paths), config.VECTOR_DIMENSION), dtype=np.float32)
+            for j, valid_idx in enumerate(valid_indices):
+                result[valid_idx] = batch_vectors[j]
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Batch embedding failed: {e}")
+            return np.zeros((len(image_paths), config.VECTOR_DIMENSION), dtype=np.float32)

@@ -165,14 +165,21 @@ class ImageViewerWindow(QMainWindow):
         )
         self.setWindowTitle(f"Refer — {asset.original_url.split('/')[-1]}  ({self.current_index + 1}/{len(self.assets)})")
 
-        # Загружаем полное изображение через воркер (thumbnail_path = full-res WebP)
+        import os
+        # Нормализуем путь
+        path = thumb_path
+        if path.startswith('file:///'):
+            path = path[8:]
+        path = os.path.normpath(path)
+
+        # Загружаем полное изображение
         from PyQt6.QtGui import QImage
-        image = QImage(thumb_path)
+        image = QImage(path)
         if not image.isNull():
             pixmap = QPixmap.fromImage(image)
             self.viewer.set_pixmap(pixmap)
         else:
-            logger.warning(f"Cannot load full image: {thumb_path}")
+            logger.warning(f"Cannot load full image: {path}")
 
     def show_prev(self):
         if self.current_index > 0:
@@ -197,21 +204,64 @@ class ImageViewerWindow(QMainWindow):
         import subprocess
         import platform
         import os
-        from urllib.parse import urlparse
         
         asset = self.assets[self.current_index]
         
-        # Если это локальный путь (начинается с file:/// или просто путь)
-        path = asset.original_url
-        if path.startswith('file:///'):
-            path = path[8:]
+        # Для веб-картинок (Behance/ArchDaily) приоритет отдаем скачанной миниатюре
+        # Для локальных файлов local_path и thumbnail_path обычно одинаковы
+        path = asset.thumbnail_path if asset.thumbnail_path else asset.local_path
         
+        # Если вообще ничего нет, пробуем original_url как фолбэк для локальных файлов
+        if not path:
+            path = asset.original_url
+            
+        if path and path.startswith('file:///'):
+            path = path[8:]
+            
+        if not path:
+            logger.warning("Нет пути для открытия папки")
+            return
+            
         # На всякий случай нормализуем путь для Windows
         path = os.path.normpath(path)
             
         if os.path.exists(path):
             if platform.system() == "Windows":
-                subprocess.run(['explorer', '/select,', path])
+                # Возвращаем самый надежный метод (SHOpenFolderAndSelectItems).
+                # Он гарантированно открывает папку и выделяет файл, 
+                # даже если скролл иногда позиционирует его внизу экрана.
+                try:
+                    import ctypes
+                    import ctypes.wintypes
+                    
+                    # Нормализуем путь
+                    abs_path = os.path.abspath(path)
+                    
+                    # Пытаемся использовать shell32
+                    shell32 = ctypes.windll.shell32
+                    co_initialize = ctypes.windll.ole32.CoInitialize
+                    co_uninitialize = ctypes.windll.ole32.CoUninitialize
+                    
+                    # Инициализируем COM
+                    co_initialize(None)
+                    
+                    # ILCreateFromPathW создает Item ID List (PIDL)
+                    pidl = shell32.ILCreateFromPathW(abs_path)
+                    if pidl:
+                        # Открываем папку и выделяем файл 
+                        # Используем флаг 1 (OFASI_EDIT), чтобы заставить Windows 
+                        # прокрутить список так, чтобы файл был полностью виден
+                        shell32.SHOpenFolderAndSelectItems(pidl, 1, None, 0)
+                        ctypes.windll.shell32.ILFree(pidl)
+                    else:
+                        subprocess.Popen(['explorer', '/select,', abs_path])
+                        
+                    co_uninitialize()
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to use SHOpenFolderAndSelectItems: {e}")
+                    subprocess.Popen(['explorer', '/select,', path])
+                    
             elif platform.system() == "Darwin": # macOS
                 subprocess.run(['open', '-R', path])
             else: # Linux

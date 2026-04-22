@@ -109,6 +109,11 @@ class SearchPanel(QWidget):
         self.chk_archdaily = QCheckBox("ArchDaily")
         self.chk_archdaily.setChecked(True)
         self.chk_behance = QCheckBox("Behance")
+        self.chk_behance.setChecked(True)
+        
+        # Сигналы для обновления базовой галереи
+        self.chk_archdaily.stateChanged.connect(self._on_source_toggled)
+        self.chk_behance.stateChanged.connect(self._on_source_toggled)
         
         main_layout.addWidget(self.chk_archdaily)
         main_layout.addWidget(self.chk_behance)
@@ -143,14 +148,18 @@ class SearchPanel(QWidget):
             chk = QCheckBox(f"📁 {folder_name}")
             chk.setChecked(True)
             chk.setToolTip(folder)
+            chk.stateChanged.connect(self._on_source_toggled)
             self.folders_layout.addWidget(chk)
             self.folder_checkboxes[folder] = chk
 
-    def _emit_search(self):
-        text = self.hybrid_input.text_input.text().strip()
-        img_path = self.hybrid_input.image_path
-        threshold = self.slider_sens.value() / 100.0
-        
+    def _on_source_toggled(self):
+        # Отправляем сигнал, но только если поле поиска пустое (иначе мы в режиме поиска)
+        if not self.hybrid_input.text_input.text().strip() and not self.hybrid_input.image_path:
+            # Мы будем использовать clear_triggered сигнал, так как он вызывает _load_assets_for_gallery в MainWindow
+            self.clear_triggered.emit()
+
+    def get_selected_sources(self) -> list:
+        """Возвращает список выбранных источников."""
         sources = []
         if self.chk_archdaily.isChecked(): sources.append('archdaily')
         if self.chk_behance.isChecked(): sources.append('behance')
@@ -158,6 +167,14 @@ class SearchPanel(QWidget):
         for folder_path, chk in self.folder_checkboxes.items():
             if chk.isChecked():
                 sources.append(folder_path)
+        return sources
+
+    def _emit_search(self):
+        text = self.hybrid_input.text_input.text().strip()
+        img_path = self.hybrid_input.image_path
+        threshold = self.slider_sens.value() / 100.0
+        
+        sources = self.get_selected_sources()
 
         self.search_triggered.emit(text, img_path, threshold, sources)
 
@@ -174,8 +191,21 @@ class SearchPanel(QWidget):
     def _clear_all(self):
         self.hybrid_input.clear_all()
         self.slider_sens.setValue(60)
+        
+        # Временно отключаем сигналы, чтобы не дергать базу много раз
+        self.chk_archdaily.blockSignals(True)
+        self.chk_behance.blockSignals(True)
+        for chk in self.folder_checkboxes.values():
+            chk.blockSignals(True)
+            
         self.chk_archdaily.setChecked(True)
-        self.chk_behance.setChecked(False)
+        self.chk_behance.setChecked(True)
         for chk in self.folder_checkboxes.values():
             chk.setChecked(True)
+            
+        self.chk_archdaily.blockSignals(False)
+        self.chk_behance.blockSignals(False)
+        for chk in self.folder_checkboxes.values():
+            chk.blockSignals(False)
+            
         self.clear_triggered.emit()

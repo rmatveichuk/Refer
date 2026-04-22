@@ -22,11 +22,17 @@ class ImageLoaderWorker(QRunnable):
     @pyqtSlot()
     def run(self):
         try:
+            import os
+            # Нормализуем путь для Windows (убираем file:/// если есть)
+            path = self.file_path
+            if path.startswith('file:///'):
+                path = path[8:]
+            path = os.path.normpath(path)
+            
             # QImage is safe to use in non-GUI threads!
-            # It loads the byte data and decodes it (e.g. WebP). 
-            image = QImage(self.file_path)
+            image = QImage(path)
             if image.isNull():
-                self.signals.error.emit(self.asset_id, f"File cannot be loaded: {self.file_path}")
+                self.signals.error.emit(self.asset_id, f"File cannot be loaded: {path}")
                 return
             
             self.signals.loaded.emit(self.asset_id, image)

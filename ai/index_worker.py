@@ -29,8 +29,12 @@ class SigLipIndexWorker(QRunnable):
     def run(self):
         total = len(self.asset_ids)
         indexed_count = 0
+        batch_size = 32 # Увеличиваем размер батча для RTX 4060, так как память разгружена
         
         try:
+            current_batch_paths = []
+            current_batch_ids = []
+            
             for i, asset_id in enumerate(self.asset_ids):
                 if self._is_cancelled:
                     break
@@ -48,20 +52,27 @@ class SigLipIndexWorker(QRunnable):
                 if not Path(thumb_path).exists():
                     continue
                 
-                # Generate embedding
-                vector = self.ai.get_image_embedding(thumb_path)
+                current_batch_paths.append(thumb_path)
+                current_batch_ids.append(asset_id)
                 
-                # Add to FAISS
-                self.faiss_mgr.add_vector_no_save(asset_id, vector)
-                
-                # Update DB
-                self.db.set_embedding_id(asset_id, asset_id)
-                
-                indexed_count += 1
-                self.signals.progress.emit(i + 1, total, f"Indexing #{asset_id}")
-                
-                if (i + 1) % 20 == 0:
-                    self.faiss_mgr.save_index()
+                if len(current_batch_paths) >= batch_size or i == total - 1:
+                    # Generate embeddings batch
+                    vectors = self.ai.get_image_embeddings_batch(current_batch_paths)
+                    
+                    # Add to FAISS
+                    self.faiss_mgr.add_vectors_batch(current_batch_ids, vectors)
+                    
+                    # Update DB
+                    self.db.set_embedding_ids_batch(current_batch_ids)
+                    
+                    indexed_count += len(current_batch_ids)
+                    self.signals.progress.emit(i + 1, total, f"Indexing #{asset_id} (batch)")
+                    
+                    current_batch_paths = []
+                    current_batch_ids = []
+                    
+                    if indexed_count % (batch_size * 5) == 0:
+                        self.faiss_mgr.save_index()
 
             self.faiss_mgr.save_index()
             self.signals.finished.emit(indexed_count)

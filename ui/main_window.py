@@ -205,17 +205,42 @@ class MainWindow(QMainWindow):
         # Получаем уникальные папки из БД
         with self.db.get_connection() as conn:
             cur = conn.cursor()
+            # Выбираем только те домены, которые похожи на пути Windows или Linux
             cur.execute("SELECT domain FROM sources WHERE domain LIKE '_:%' OR domain LIKE '/%'")
             rows = cur.fetchall()
+            
+            # Умная фильтрация: оставляем только родительские папки
+            # Если есть C:\A и C:\A\B, то оставляем только C:\A для отображения
+            import os
             custom_folders = [row['domain'] for row in rows]
             
-        self.search_panel.update_custom_folders(custom_folders)
+            # Сортируем по длине (самые короткие/корневые в начале)
+            custom_folders.sort(key=len)
+            
+            filtered_folders = []
+            for folder in custom_folders:
+                # Проверяем, не является ли эта папка дочерней для какой-либо из уже добавленных
+                is_child = False
+                for parent in filtered_folders:
+                    # Используем os.path.commonpath для надежного сравнения путей
+                    try:
+                        if os.path.commonpath([parent, folder]) == parent:
+                            is_child = True
+                            break
+                    except ValueError:
+                        pass # пути на разных дисках
+                
+                if not is_child:
+                    filtered_folders.append(folder)
+            
+        self.search_panel.update_custom_folders(filtered_folders)
 
     def _add_folder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
         if folder_path:
+            parse_mode = self.top_toolbar.type_combo.currentText()
             self.top_toolbar.set_scraping_state(True)
-            self.status_label.setText(f"Сканирование: {folder_path}")
+            self.status_label.setText(f"Сканирование ({parse_mode}): {folder_path}")
             self.progress_bar.setVisible(True)
             self.progress_bar.setRange(0, 0)
             
@@ -225,8 +250,8 @@ class MainWindow(QMainWindow):
             if self.active_scraper:
                 self.active_scraper.cancel()
                 
-            self.active_scraper = LocalFolderParser(folder_path, self.db)
-            self.active_scraper.signals.asset_processed.connect(self.on_new_asset)
+            self.active_scraper = LocalFolderParser(folder_path, self.db, mode=parse_mode)
+            # Мы НЕ подключаем asset_processed, чтобы не вешать UI (будет только прогресс бар)
             self.active_scraper.signals.progress.connect(self._on_local_folder_progress)
             self.active_scraper.signals.finished.connect(self.on_scrape_finished)
             self.active_scraper.signals.error.connect(self.on_scrape_error)
@@ -239,22 +264,60 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Сканирование [{current}/{total}]: {info}")
 
     def _load_assets_for_gallery(self):
+        # Получаем выбранные источники
+        selected_sources = self.search_panel.get_selected_sources()
+        
+        # Если ничего не выбрано - галерея пустая
+        if not selected_sources:
+            self.gallery_model.setAssets([])
+            return
+
         with self.db.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
-            query = "SELECT * FROM assets"
+            query = "SELECT a.* FROM assets a"
             conditions = []
             params = []
+            
+            # --- Логика фильтрации по источникам ---
+            allowed_domains = []
+            custom_folder_domains = []
+
+            for src in selected_sources:
+                if src == 'archdaily':
+                    allowed_domains.append('archdaily.com')
+                elif src == 'behance':
+                    allowed_domains.append('behance.net')
+                else:
+                    custom_folder_domains.append(src)
+
+            allowed_source_ids = []
+            if allowed_domains or custom_folder_domains:
+                all_domains = allowed_domains + custom_folder_domains
+                domain_placeholders = ','.join('?' for _ in all_domains)
+                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", all_domains)
+                allowed_source_ids = [row['id'] for row in cur.fetchall()]
+
+            if allowed_source_ids:
+                src_placeholders = ','.join('?' for _ in allowed_source_ids)
+                conditions.append(f"a.source_id IN ({src_placeholders})")
+                params.extend(allowed_source_ids)
+            else:
+                # Источники выбраны в UI, но в БД их еще нет (или они пусты)
+                self.gallery_model.setAssets([])
+                return
 
             # Categories filtering based on current_category
             if self.current_category == "3D Models":
-                conditions.append("category = '3d_render'")
+                conditions.append("a.category = '3d_render'")
+            elif self.current_category == "Textures":
+                conditions.append("a.category = 'textures'")
             # Add custom if needed
             
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
-            query += " ORDER BY created_at DESC"
+            query += " ORDER BY a.created_at DESC"
             
             cur.execute(query, params)
             
@@ -478,8 +541,10 @@ class MainWindow(QMainWindow):
     # === Search Logic ===
 
     def _on_clear_search(self):
+        # Восстанавливаем оригинальный вызов
+        # Поиск очищается, источники включены все, загружаем галерею с учетом источников
         self._load_assets_for_gallery()
-        self.status_label.setText("Сброс фильтров. Показаны все ассеты.")
+        self.status_label.setText("Сброс фильтров. Показаны все выбранные источники.")
 
     def _perform_visual_search(self, text: str, img_path: str, threshold: float, sources: list):
         if not text and not img_path:
