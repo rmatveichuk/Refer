@@ -209,39 +209,29 @@ class MainWindow(QMainWindow):
         self._load_assets_for_gallery()
 
     def update_sources_panel(self):
-        # Эта функция будет вызываться, чтобы обновить чекбоксы в SearchPanel
-        # Получаем уникальные папки из БД
+        # 1. Получаем "точки входа" из таблицы sources
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            # Выбираем только те домены, которые похожи на пути Windows или Linux
             cur.execute("SELECT domain FROM sources WHERE domain LIKE '_:%' OR domain LIKE '/%'")
-            rows = cur.fetchall()
+            source_folders = [row['domain'] for row in (cur.fetchall() or [])]
+
+            # 2. Получаем ВСЕ папки, в которых лежат проиндексированные файлы
+            cur.execute("SELECT DISTINCT local_path FROM assets WHERE local_path IS NOT NULL")
+            asset_paths = [row['local_path'] for row in cur.fetchall()]
             
-            # Умная фильтрация: оставляем только родительские папки
-            # Если есть C:\A и C:\A\B, то оставляем только C:\A для отображения
             import os
-            custom_folders = [row['domain'] for row in rows]
+            # Путь к папке thumbnails, которую нужно скрыть
+            app_data = os.getenv('LOCALAPPDATA')
+            thumbnails_path = os.path.join(app_data, 'ReferAssetManager', 'thumbnails').lower() if app_data else ""
             
-            # Сортируем по длине (самые короткие/корневые в начале)
-            custom_folders.sort(key=len)
+            all_folders = set(source_folders)
+            for p in asset_paths:
+                folder = os.path.dirname(p)
+                # Пропускаем папку thumbnails и пустые пути
+                if folder and folder.lower() != thumbnails_path:
+                    all_folders.add(folder)
             
-            filtered_folders = []
-            for folder in custom_folders:
-                # Проверяем, не является ли эта папка дочерней для какой-либо из уже добавленных
-                is_child = False
-                for parent in filtered_folders:
-                    # Используем os.path.commonpath для надежного сравнения путей
-                    try:
-                        if os.path.commonpath([parent, folder]) == parent:
-                            is_child = True
-                            break
-                    except ValueError:
-                        pass # пути на разных дисках
-                
-                if not is_child:
-                    filtered_folders.append(folder)
-            
-        self.search_panel.update_custom_folders(filtered_folders)
+        self.search_panel.update_custom_folders(list(all_folders))
 
     def _add_folder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
@@ -289,30 +279,50 @@ class MainWindow(QMainWindow):
             params = []
             
             # --- Логика фильтрации по источникам ---
-            allowed_domains = []
-            custom_folder_domains = []
+            web_domains = []
+            folder_paths = []
 
             for src in selected_sources:
                 if src == 'archdaily':
-                    allowed_domains.append('archdaily.com')
+                    web_domains.append('archdaily.com')
                 elif src == 'behance':
-                    allowed_domains.append('behance.net')
+                    web_domains.append('behance.net')
                 else:
-                    custom_folder_domains.append(src)
+                    folder_paths.append(src)
 
-            allowed_source_ids = []
-            if allowed_domains or custom_folder_domains:
-                all_domains = allowed_domains + custom_folder_domains
-                domain_placeholders = ','.join('?' for _ in all_domains)
-                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", all_domains)
+            source_conditions = []
+            
+            # 1. Фильтр по веб-доменам (через source_id)
+            if web_domains:
+                domain_placeholders = ','.join('?' for _ in web_domains)
+                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", web_domains)
                 allowed_source_ids = [row['id'] for row in cur.fetchall()]
+                if allowed_source_ids:
+                    src_placeholders = ','.join('?' for _ in allowed_source_ids)
+                    source_conditions.append(f"a.source_id IN ({src_placeholders})")
+                    params.extend(allowed_source_ids)
 
-            if allowed_source_ids:
-                src_placeholders = ','.join('?' for _ in allowed_source_ids)
-                conditions.append(f"a.source_id IN ({src_placeholders})")
-                params.extend(allowed_source_ids)
+            # 2. Фильтр по локальным папкам (через префикс пути)
+            if folder_paths:
+                folder_sub_conditions = []
+                for path in folder_paths:
+                    # Нормализуем путь: превращаем всё в один тип слэша (/) для сравнения
+                    search_path = path.replace('\\', '/')
+                    if not search_path.endswith('/'):
+                        search_path += '/'
+                    
+                    # В SQL мы тоже превращаем все слэши в / перед сравнением
+                    # Это гарантирует совпадение даже если в БД каша из слэшей
+                    folder_sub_conditions.append("REPLACE(a.local_path, '\\', '/') LIKE ?")
+                    params.append(search_path + "%")
+                
+                if folder_sub_conditions:
+                    source_conditions.append(f"({' OR '.join(folder_sub_conditions)})")
+
+            if source_conditions:
+                conditions.append(f"({' OR '.join(source_conditions)})")
             else:
-                # Источники выбраны в UI, но в БД их еще нет (или они пусты)
+                # Источники выбраны в UI, но в БД их еще нет
                 self.gallery_model.setAssets([])
                 return
 
