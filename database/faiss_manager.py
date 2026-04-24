@@ -66,3 +66,15 @@ class FaissManager:
             
         distances, indices = self.index.search(query_vector, k)
         return distances[0], indices[0]
+
+    def remove_ids(self, asset_ids: list[int]):
+        """Removes vectors from index by their SQLite asset IDs."""
+        if not asset_ids:
+            return
+            
+        id_array = np.array(asset_ids, dtype=np.int64)
+        # remove_ids returns number of removed vectors
+        removed_count = self.index.remove_ids(id_array)
+        if removed_count > 0:
+            self.save_index()
+            logger.info(f"Removed {removed_count} vectors from FAISS index.")

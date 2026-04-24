@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, 
+    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, QPushButton, 
     QLabel, QProgressBar, QTabWidget, QTableView, QHeaderView, 
     QAbstractItemView, QMenu, QApplication
 )
@@ -139,15 +139,103 @@ class MainWindow(QMainWindow):
             QTabBar::tab { background: #1a1a1a; color: #888; padding: 8px 16px; border: none; }
             QTabBar::tab:selected { background: #29b6f6; color: #000; font-weight: bold; }
         """)
+        
+        # --- We will add the buttons as "fake tabs" instead ---
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        self._previous_tab_index = 0
+        
         content_layout.addWidget(self.tabs, 1)
 
         self._setup_gallery_tab()
         self._setup_library_tab()
 
+
+
+
+
+    def _on_tab_changed(self, index):
+        tab_text = self.tabs.tabText(index)
+        if tab_text == "Выделить все":
+            self.tabs.setCurrentIndex(self._previous_tab_index)
+            self._select_all_gallery()
+        elif tab_text == "Удалить":
+            self.tabs.setCurrentIndex(self._previous_tab_index)
+            self._delete_selected_gallery()
+        else:
+            self._previous_tab_index = index
+
+    def _select_all_gallery(self):
+        self.gallery.selectAll()
+
+    def _delete_selected_gallery(self):
+        selection_model = self.gallery.selectionModel()
+        if not selection_model.hasSelection():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Ничего не выбрано", "Пожалуйста, выделите картинки для удаления.")
+            return
+
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Удаление",
+            "Вы действительно хотите удалить выбранные картинки?\nОни больше не будут добавляться при сканировании.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        indexes = selection_model.selectedIndexes()
+        
+        # Sort in reverse order to safely delete by index if needed
+        # But we will use the IDs from the model instead
+        assets_to_delete = []
+        for idx in indexes:
+            asset = self.gallery_model.assets[idx.row()]
+            assets_to_delete.append(asset)
+
+        if not assets_to_delete:
+            return
+
+        import os
+        import logging
+        logger = logging.getLogger(__name__)
+
+        deleted_count = 0
+        for asset in assets_to_delete:
+            # Add to deleted list to prevent re-adding (this happens in mark_as_deleted)
+            if asset.original_url:
+                self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
+            
+            # Delete physical file ONLY if it's not a local folder asset
+            if asset.image_type != "Local":
+                if asset.local_path and os.path.exists(asset.local_path):
+                    try:
+                        os.remove(asset.local_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete local_path file: {e}")
+
+                if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
+                    try:
+                        os.remove(asset.thumbnail_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete thumbnail file: {e}")
+            
+            # Delete from DB
+            with self.db.get_connection() as conn:
+                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
+                conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
+                conn.commit()
+            deleted_count += 1
+
+        self._load_assets_for_gallery()
+        self._refresh_library()
+        self.status_label.setText(f"Удалено {deleted_count} картинок.")
+
     def _setup_gallery_tab(self):
         gallery_tab = QWidget()
         gallery_layout = QVBoxLayout(gallery_tab)
         gallery_layout.setContentsMargins(0, 0, 0, 0)
+        gallery_layout.setSpacing(0)
 
         self.gallery = GalleryView()
         self.gallery_model = AssetListModel()
@@ -156,7 +244,7 @@ class MainWindow(QMainWindow):
         self.gallery.parent_window = self
         
         gallery_layout.addWidget(self.gallery)
-        self.tabs.addTab(gallery_tab, "🖼 Галерея")
+        self.tabs.addTab(gallery_tab, "Галерея")
 
     def _setup_library_tab(self):
         library_tab = QWidget()
@@ -180,7 +268,11 @@ class MainWindow(QMainWindow):
         self.library_table.customContextMenuRequested.connect(self._show_library_context_menu)
 
         library_layout.addWidget(self.library_table)
-        self.tabs.addTab(library_tab, "📋 Таблица")
+        self.tabs.addTab(library_tab, "Таблица")
+        
+        # Fake tabs for actions
+        self.tabs.addTab(QWidget(), "Выделить все")
+        self.tabs.addTab(QWidget(), "Удалить")
 
     # === Core Logic Integration ===
 
@@ -354,6 +446,8 @@ class MainWindow(QMainWindow):
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
                     width=row['width'], height=row['height'],
                     category=row.get('category', '3d_render'),
+                    image_type=row.get('image_type', 'Photography'),
+                    local_path=row.get('local_path', ''),
                     is_favorite=bool(row.get('is_favorite', 0))
                 ))
             self.gallery_model.setAssets(assets)
@@ -731,6 +825,8 @@ class MainWindow(QMainWindow):
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
                     width=row['width'], height=row['height'],
                     category=row.get('category', '3d_render'),
+                    image_type=row.get('image_type', 'Photography'),
+                    local_path=row.get('local_path', ''),
                     is_favorite=bool(row.get('is_favorite', 0))
                 ))
 
