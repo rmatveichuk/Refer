@@ -1,5 +1,5 @@
 from typing import List, Dict
-from PyQt6.QtCore import QAbstractListModel, Qt, QModelIndex, pyqtSignal
+from PyQt6.QtCore import QAbstractListModel, Qt, QModelIndex, pyqtSignal, QMimeData, QUrl
 from PyQt6.QtGui import QPixmap, QColor
 
 from database.models import Asset
@@ -28,6 +28,12 @@ class AssetListModel(QAbstractListModel):
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self.assets)
 
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        default_flags = super().flags(index)
+        if index.isValid():
+            return default_flags | Qt.ItemFlag.ItemIsDragEnabled
+        return default_flags
+
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid() or not (0 <= index.row() < self.rowCount()):
             return None
@@ -55,6 +61,28 @@ class AssetListModel(QAbstractListModel):
             return asset
 
         return None
+
+    def mimeTypes(self) -> List[str]:
+        return ["text/uri-list"]
+
+    def supportedDragActions(self):
+        return Qt.DropAction.CopyAction
+
+    def mimeData(self, indexes: List[QModelIndex]) -> QMimeData:
+        mime_data = QMimeData()
+        urls = []
+        for index in indexes:
+            if index.isValid() and 0 <= index.row() < self.rowCount():
+                asset = self.assets[index.row()]
+                # Prefer local_path for full resolution, fallback to thumbnail
+                path = asset.local_path if asset.local_path else asset.thumbnail_path
+                if path:
+                    import os
+                    if os.path.exists(path):
+                        urls.append(QUrl.fromLocalFile(os.path.abspath(path)))
+        
+        mime_data.setUrls(urls)
+        return mime_data
 
     def setImage(self, asset_id: int, pixmap: QPixmap):
         """Called by the main thread when QImage has been decoded and passed back."""

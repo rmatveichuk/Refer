@@ -94,6 +94,7 @@ class HybridSearchInput(QWidget):
             return
         file_path = urls[0].toLocalFile()
         if file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+            event.acceptProposedAction()
             self.set_image(file_path)
 
     def set_image(self, path: str):
