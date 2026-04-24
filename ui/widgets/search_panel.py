@@ -306,10 +306,15 @@ class SearchPanel(QWidget):
     def _clear_all(self):
         self.hybrid_input.clear_all()
         self.slider_sens.setValue(60)
+        
         self.sources_tree.blockSignals(True)
-        def check_recursive(item):
-            item.setCheckState(0, Qt.CheckState.Checked)
-            for i in range(item.childCount()): check_recursive(item.child(i))
-        check_recursive(self.sources_tree.invisibleRootItem())
+        def uncheck_recursive(item):
+            item.setCheckState(0, Qt.CheckState.Unchecked)
+            for i in range(item.childCount()): 
+                uncheck_recursive(item.child(i))
+        
+        uncheck_recursive(self.sources_tree.invisibleRootItem())
+        self.sources_tree.collapseAll()
         self.sources_tree.blockSignals(False)
+        
         self.clear_triggered.emit()

@@ -227,9 +227,16 @@ class MainWindow(QMainWindow):
             all_folders = set(source_folders)
             for p in asset_paths:
                 folder = os.path.dirname(p)
-                # Пропускаем папку thumbnails и пустые пути
-                if folder and folder.lower() != thumbnails_path:
-                    all_folders.add(folder)
+                # Добавляем саму папку и ВСЕ её родительские папки вверх по дереву
+                # пока не дойдем до одной из "точек входа" или корня диска
+                curr = folder
+                while curr and len(curr) > 3:
+                    if curr.lower() == thumbnails_path:
+                        break
+                    all_folders.add(curr)
+                    next_parent = os.path.dirname(curr)
+                    if next_parent == curr: break # Дошли до корня
+                    curr = next_parent
             
         self.search_panel.update_custom_folders(list(all_folders))
 
