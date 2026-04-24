@@ -255,24 +255,40 @@ class DatabaseManager:
             return [row['id'] for row in cur.fetchall()]
 
     def cleanup_missing_files(self) -> tuple:
-        """Удаляет записи ассетов, у которых нет локального файла.
+        """Удаляет записи ассетов, у которых нет локального файла на диске.
 
         Returns:
-            (deleted_count, missing_paths) — количество удалённых и список отсутствующих путей
+            (deleted_count, deleted_ids) — количество удалённых и список их ID
         """
-        missing_paths = []
+        deleted_ids = []
         deleted_count = 0
 
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, local_path FROM assets")
+            cur.execute("SELECT id, local_path, thumbnail_path, image_type FROM assets")
             rows = cur.fetchall()
 
             for row in rows:
                 asset_id = row['id']
                 local_path = row['local_path']
-                if local_path and not Path(local_path).exists():
-                    missing_paths.append(local_path)
+                thumb_path = row['thumbnail_path']
+                img_type = row['image_type'] or 'Photography'
+
+                is_missing = False
+                # Для локальных файлов проверяем оригинал
+                if img_type == "Local" and local_path:
+                    if not Path(local_path).exists():
+                        is_missing = True
+                # Для веб-файлов или если нет локального пути, проверяем превью в кэше
+                elif thumb_path:
+                    if not Path(thumb_path).exists():
+                        is_missing = True
+                elif local_path: # fallback
+                    if not Path(local_path).exists():
+                        is_missing = True
+
+                if is_missing:
+                    deleted_ids.append(asset_id)
                     # Удаляем связанные теги
                     conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset_id,))
                     # Удаляем ассет
@@ -281,15 +297,14 @@ class DatabaseManager:
 
             conn.commit()
 
-        # Также чистим неиспользуемые теги
-        with self.get_connection() as conn:
-            conn.execute("""
-                DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM asset_tags)
-            """)
-            conn.commit()
+        # Чистим неиспользуемые теги
+        if deleted_count > 0:
+            with self.get_connection() as conn:
+                conn.execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM asset_tags)")
+                conn.commit()
 
         logger.info(f"Cleanup: deleted {deleted_count} assets with missing files")
-        return deleted_count, missing_paths
+        return deleted_count, deleted_ids
 
     # === Favorite operations ===
 
@@ -306,12 +321,12 @@ class DatabaseManager:
                 return bool(new_status)
         return False
 
-    def get_favorite_assets(self) -> List[int]:
-        """Возвращает ID ассетов в избранном."""
+    def get_all_asset_ids(self) -> set[int]:
+        """Возвращает сет всех ID ассетов, существующих в базе."""
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id FROM assets WHERE is_favorite = 1")
-            return [row['id'] for row in cur.fetchall()]
+            cur.execute("SELECT id FROM assets")
+            return {row['id'] for row in cur.fetchall()}
 
     def is_favorite(self, asset_id: int) -> bool:
         """Проверяет, в избранном ли ассет."""

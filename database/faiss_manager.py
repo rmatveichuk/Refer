@@ -78,3 +78,7 @@ class FaissManager:
         if removed_count > 0:
             self.save_index()
             logger.info(f"Removed {removed_count} vectors from FAISS index.")
+
+    def get_all_ids(self) -> np.ndarray:
+        """Returns all asset IDs currently stored in the FAISS index."""
+        return faiss.vector_to_array(self.index.id_map)

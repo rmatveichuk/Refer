@@ -9,6 +9,8 @@ class TopToolbar(QWidget):
     index_requested = pyqtSignal()
     cleanup_requested = pyqtSignal()
     category_changed = pyqtSignal(str)
+    ignore_deleted_toggled = pyqtSignal(bool)
+    subfolders_toggled = pyqtSignal(bool) # True = Recursive
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,6 +25,10 @@ class TopToolbar(QWidget):
             QPushButton:hover { background-color: #3d3d3d; border-color: #555; }
             QComboBox, QLineEdit { background-color: #2d2d2d; border: 1px solid #444; border-radius: 6px; padding: 5px 10px; }
             QComboBox:focus, QLineEdit:focus { border-color: #29b6f6; }
+            QCheckBox { spacing: 8px; font-size: 12px; color: #aaa; }
+            QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #444; border-radius: 4px; background-color: #2d2d2d; }
+            QCheckBox::indicator:checked { background-color: #29b6f6; border-color: #29b6f6; }
+            QCheckBox:hover { color: #fff; }
         """)
 
         layout = QHBoxLayout(self)
@@ -56,6 +62,18 @@ class TopToolbar(QWidget):
         layout.addStretch(1)
 
         # --- Right Block: Typing, Adding, Sync ---
+        from PyQt6.QtWidgets import QCheckBox
+        
+        self.check_ignore_deleted = QCheckBox("Игнорировать удаленные")
+        self.check_ignore_deleted.setChecked(True)
+        self.check_ignore_deleted.setToolTip("Не добавлять повторно файлы, которые были ранее удалены из галереи")
+        self.check_ignore_deleted.toggled.connect(self.ignore_deleted_toggled.emit)
+        
+        self.check_subfolders = QCheckBox("Подпапки")
+        self.check_subfolders.setChecked(True)
+        self.check_subfolders.setToolTip("Искать изображения во всех вложенных папках")
+        self.check_subfolders.toggled.connect(self.subfolders_toggled.emit)
+
         self.type_combo = QComboBox()
         self.type_combo.addItems(["All", "Textures", "3D Models"])
         self.type_combo.currentIndexChanged.connect(lambda: self.category_changed.emit(self.type_combo.currentText()))
@@ -71,6 +89,8 @@ class TopToolbar(QWidget):
         self.btn_cleanup.setStyleSheet("background-color: #546e7a; color: white; border: none;")
         self.btn_cleanup.clicked.connect(self.cleanup_requested.emit)
 
+        layout.addWidget(self.check_ignore_deleted)
+        layout.addWidget(self.check_subfolders)
         layout.addWidget(self.type_combo)
         layout.addWidget(self.btn_add_folder)
         layout.addWidget(self.btn_index)

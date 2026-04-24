@@ -18,11 +18,13 @@ class LocalFolderSignals(QObject):
     progress = pyqtSignal(int, int, str)
 
 class LocalFolderParser(QRunnable):
-    def __init__(self, folder_path: str, db_manager: DatabaseManager, mode: str = "All"):
+    def __init__(self, folder_path: str, db_manager: DatabaseManager, mode: str = "All", recursive: bool = True, skip_deleted: bool = True):
         super().__init__()
         self.folder_path = folder_path
         self.db = db_manager
         self.mode = mode
+        self.recursive = recursive
+        self.skip_deleted = skip_deleted
         self.signals = LocalFolderSignals()
         self._is_cancelled = False
         self.valid_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
@@ -105,14 +107,29 @@ class LocalFolderParser(QRunnable):
 
             # Сначала соберем все файлы
             files_to_process = []
-            for root, _, files in os.walk(self.folder_path):
-                if self._is_cancelled:
-                    break
-                for file in files:
-                    ext = Path(file).suffix.lower()
-                    if ext in self.valid_extensions:
-                        if not self._should_ignore_file(root, file):
-                            files_to_process.append(os.path.join(root, file))
+            
+            if self.recursive:
+                for root, _, files in os.walk(self.folder_path):
+                    if self._is_cancelled:
+                        break
+                    for file in files:
+                        ext = Path(file).suffix.lower()
+                        if ext in self.valid_extensions:
+                            if not self._should_ignore_file(root, file):
+                                files_to_process.append(os.path.join(root, file))
+            else:
+                # Только корневая папка
+                root = self.folder_path
+                try:
+                    for entry in os.scandir(root):
+                        if self._is_cancelled: break
+                        if entry.is_file():
+                            ext = Path(entry.name).suffix.lower()
+                            if ext in self.valid_extensions:
+                                if not self._should_ignore_file(root, entry.name):
+                                    files_to_process.append(entry.path)
+                except Exception as e:
+                    logger.error(f"Ошибка при сканировании корня {root}: {e}")
 
             total_files = len(files_to_process)
             logger.info(f"Найдено изображений для обработки: {total_files}")
@@ -122,6 +139,11 @@ class LocalFolderParser(QRunnable):
                 cur = conn.cursor()
                 cur.execute("SELECT local_path FROM assets WHERE source_id = ?", (self.current_source_id,))
                 existing_paths = {row['local_path'] for row in cur.fetchall()}
+                
+                # Также запрашиваем список удаленных (игнорируемых) путей
+                # (Для локальных файлов original_url в базе часто равен file:///... или совпадает с путем)
+                cur.execute("SELECT original_url FROM deleted_assets")
+                deleted_urls = {row['original_url'] for row in cur.fetchall()}
 
             # Батчинг
             batch_size = 500
@@ -139,6 +161,10 @@ class LocalFolderParser(QRunnable):
 
                 if file_path in existing_paths:
                     continue # Уже есть в БД
+                
+                file_url = f"file:///{file_path.replace(os.sep, '/')}"
+                if self.skip_deleted and file_url in deleted_urls:
+                    continue # Игнорируем удаленный ранее файл
 
                 # Быстро читаем размеры, не загружая всю картинку в память если возможно
                 try:

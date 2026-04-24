@@ -70,13 +70,20 @@ class MainWindow(QMainWindow):
                 try:
                     from ai.engine import AiEngine
                     engine = AiEngine()
-                    self.parent.ai = engine
-                    self.parent.status_label.setText("✅ AI готов")
+                    # Проверяем, не удален ли родительский объект перед обновлением UI
+                    from PyQt6 import sip
+                    if not sip.isdeleted(self.parent):
+                        self.parent.ai = engine
+                        self.parent.status_label.setText("✅ AI готов")
                 except Exception as e:
                     logger.error(f"Background AI init failed: {e}")
-                    self.parent.status_label.setText("❌ Ошибка AI")
+                    from PyQt6 import sip
+                    if not sip.isdeleted(self.parent):
+                        self.parent.status_label.setText("❌ Ошибка AI")
                 finally:
-                    self.parent.ai_initializing = False
+                    from PyQt6 import sip
+                    if not sip.isdeleted(self.parent):
+                        self.parent.ai_initializing = False
 
         worker = InitWorker(self)
         QThreadPool.globalInstance().start(worker)
@@ -130,6 +137,7 @@ class MainWindow(QMainWindow):
         self.search_panel = SearchPanel()
         self.search_panel.search_triggered.connect(self._perform_visual_search)
         self.search_panel.clear_triggered.connect(self._on_clear_search)
+        self.search_panel.remove_source_requested.connect(self._remove_source_folder)
         content_layout.addWidget(self.search_panel)
 
         # --- Right: Gallery & Library Tabs ---
@@ -148,11 +156,6 @@ class MainWindow(QMainWindow):
 
         self._setup_gallery_tab()
         self._setup_library_tab()
-
-
-
-
-
     def _on_tab_changed(self, index):
         tab_text = self.tabs.tabText(index)
         if tab_text == "Выделить все":
@@ -170,66 +173,12 @@ class MainWindow(QMainWindow):
     def _delete_selected_gallery(self):
         selection_model = self.gallery.selectionModel()
         if not selection_model.hasSelection():
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(self, "Ничего не выбрано", "Пожалуйста, выделите картинки для удаления.")
             return
 
-        from PyQt6.QtWidgets import QMessageBox
-        reply = QMessageBox.question(
-            self,
-            "Удаление",
-            "Вы действительно хотите удалить выбранные картинки?\nОни больше не будут добавляться при сканировании.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
         indexes = selection_model.selectedIndexes()
-        
-        # Sort in reverse order to safely delete by index if needed
-        # But we will use the IDs from the model instead
-        assets_to_delete = []
-        for idx in indexes:
-            asset = self.gallery_model.assets[idx.row()]
-            assets_to_delete.append(asset)
-
-        if not assets_to_delete:
-            return
-
-        import os
-        import logging
-        logger = logging.getLogger(__name__)
-
-        deleted_count = 0
-        for asset in assets_to_delete:
-            # Add to deleted list to prevent re-adding (this happens in mark_as_deleted)
-            if asset.original_url:
-                self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
-            
-            # Delete physical file ONLY if it's not a local folder asset
-            if asset.image_type != "Local":
-                if asset.local_path and os.path.exists(asset.local_path):
-                    try:
-                        os.remove(asset.local_path)
-                    except Exception as e:
-                        logger.warning(f"Failed to delete local_path file: {e}")
-
-                if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
-                    try:
-                        os.remove(asset.thumbnail_path)
-                    except Exception as e:
-                        logger.warning(f"Failed to delete thumbnail file: {e}")
-            
-            # Delete from DB
-            with self.db.get_connection() as conn:
-                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
-                conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
-                conn.commit()
-            deleted_count += 1
-
-        self._load_assets_for_gallery()
-        self._refresh_library()
-        self.status_label.setText(f"Удалено {deleted_count} картинок.")
+        assets_to_delete = [self.gallery_model.assets[idx.row()] for idx in indexes]
+        self._delete_assets_batch(assets_to_delete)
 
     def _setup_gallery_tab(self):
         gallery_tab = QWidget()
@@ -274,23 +223,74 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(QWidget(), "Выделить все")
         self.tabs.addTab(QWidget(), "Удалить")
 
-    # === Core Logic Integration ===
+    def _delete_assets_batch(self, assets: list):
+        """Централизованное удаление списка ассетов (БД + FAISS + файлы)."""
+        if not assets:
+            return
+
+        count = len(assets)
+        msg = f"Вы действительно хотите удалить {count} ассетов?\n\nОни будут скрыты из галереи и не добавятся при повторном сканировании."
+        reply = QMessageBox.question(self, "Удаление", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        deleted_count = 0
+        asset_ids = []
+        
+        for asset in assets:
+            asset_ids.append(asset.id)
+            
+            # 1. Помечаем как удаленный для игнорирования в будущем
+            if asset.original_url:
+                self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
+            
+            # 2. Удаляем физический файл ТОЛЬКО для веба
+            if asset.image_type != "Local":
+                if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
+                    try: os.remove(asset.thumbnail_path)
+                    except: pass
+            
+            # 3. Удаляем из БД
+            with self.db.get_connection() as conn:
+                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
+                conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
+                conn.commit()
+            
+            deleted_count += 1
+
+        # 4. Удаляем из FAISS
+        if asset_ids:
+            self.faiss_mgr.remove_ids(asset_ids)
+
+        self._load_assets_for_gallery()
+        self._refresh_library()
+        self.status_label.setText(f"🧹 Удалено {deleted_count} ассетов")
 
     def _cleanup_missing_files(self):
-        with self.db.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT id, thumbnail_path FROM assets")
-            assets = cur.fetchall()
- 
-        missing_count = 0
-        from pathlib import Path
-        for asset_id, thumbnail_path in assets:
-            if thumbnail_path and not Path(thumbnail_path).exists():
-                conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
-                missing_count += 1
+        """Очистка базы от записей, файлы которых были удалены пользователем вручную."""
+        deleted_count, deleted_ids = self.db.cleanup_missing_files()
         
-        if missing_count > 0:
-            self.status_label.setText(f"🧹 Удалено {missing_count} отсутствующих записей")
+        # Глубокая очистка FAISS (на случай, если что-то осталось от прошлых удалений)
+        try:
+            faiss_ids = self.faiss_mgr.get_all_ids()
+            db_ids = self.db.get_all_asset_ids()
+            # Находим ID, которые есть в FAISS, но нет в базе
+            orphan_ids = [int(fid) for fid in faiss_ids if int(fid) not in db_ids]
+            
+            if orphan_ids:
+                self.faiss_mgr.remove_ids(orphan_ids)
+                logger.info(f"Deep Cleanup: removed {len(orphan_ids)} orphaned vectors from FAISS")
+        except Exception as e:
+            logger.error(f"Deep FAISS cleanup failed: {e}")
+
+        if deleted_count > 0 or (locals().get('orphan_ids') and len(orphan_ids) > 0):
+            # Синхронизируем с FAISS (хотя это уже сделано выше в глубокой очистке, оставим для надежности)
+            if deleted_ids:
+                self.faiss_mgr.remove_ids(deleted_ids)
+            
+            total_removed = deleted_count + (len(orphan_ids) if locals().get('orphan_ids') else 0)
+            self.status_label.setText(f"🧹 Очищено {total_removed} неактуальных записей")
             self._load_assets_for_gallery()
             self._refresh_library()
         else:
@@ -336,29 +336,109 @@ class MainWindow(QMainWindow):
         folder_path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
         if folder_path:
             parse_mode = self.top_toolbar.type_combo.currentText()
+            skip_deleted = self.top_toolbar.check_ignore_deleted.isChecked()
+            recursive = self.top_toolbar.check_subfolders.isChecked()
+
             self.top_toolbar.set_scraping_state(True)
             self.status_label.setText(f"Сканирование ({parse_mode}): {folder_path}")
             self.progress_bar.setVisible(True)
             self.progress_bar.setRange(0, 0)
             
-            # Если уже что-то скрапится, мы заменяем воркер. 
-            # Для надежности можно было бы сделать пул парсеров, 
-            # но пока используем active_scraper
             if self.active_scraper:
                 self.active_scraper.cancel()
                 
-            self.active_scraper = LocalFolderParser(folder_path, self.db, mode=parse_mode)
-            # Мы НЕ подключаем asset_processed, чтобы не вешать UI (будет только прогресс бар)
+            self.active_scraper = LocalFolderParser(
+                folder_path, self.db, 
+                mode=parse_mode, 
+                recursive=recursive, 
+                skip_deleted=skip_deleted
+            )
             self.active_scraper.signals.progress.connect(self._on_local_folder_progress)
             self.active_scraper.signals.finished.connect(self.on_scrape_finished)
             self.active_scraper.signals.error.connect(self.on_scrape_error)
             QThreadPool.globalInstance().start(self.active_scraper)
 
-    @pyqtSlot(int, int, str)
     def _on_local_folder_progress(self, current: int, total: int, info: str):
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         self.status_label.setText(f"Сканирование [{current}/{total}]: {info}")
+
+    def _remove_source_folder(self, path_or_domain: str):
+        """Полное удаление источника и всех его ассетов из БД и FAISS."""
+        msg = f"Удалить источник '{path_or_domain}' и все связанные с ним изображения из галереи?\n\nФайлы на диске затронуты не будут."
+        reply = QMessageBox.question(self, "Удаление источника", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # 1. Находим все ассеты, принадлежащие этому источнику или пути
+        assets_to_delete = []
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            
+            # Определяем, это веб-домен или локальный путь
+            if path_or_domain in ('archdaily', 'behance'):
+                domain = 'archdaily.com' if path_or_domain == 'archdaily' else 'behance.net'
+                cur.execute("""
+                    SELECT a.* FROM assets a 
+                    JOIN sources s ON a.source_id = s.id 
+                    WHERE s.domain = ?
+                """, (domain,))
+            else:
+                # Для локальных папок удаляем всё, что начинается с этого пути
+                search_path = path_or_domain.replace('\\', '/')
+                if not search_path.endswith('/'): search_path += '/'
+                cur.execute("SELECT * FROM assets WHERE REPLACE(local_path, '\\', '/') LIKE ?", (search_path + "%",))
+            
+            rows = cur.fetchall()
+            for row in rows:
+                assets_to_delete.append(Asset(
+                    id=row['id'], original_url=row['original_url'],
+                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
+                    image_type=row['image_type'] or 'Photography'
+                ))
+
+        # 2. Удаляем ассеты пачкой (уже синхронизирует FAISS и БД)
+        if assets_to_delete:
+            # Мы вызываем _delete_assets_batch, но нам нужно избежать ПОВТОРНОГО подтверждения внутри него.
+            # Поэтому мы временно подменим QMessageBox.question или просто реализуем логику тут.
+            # На самом деле, лучше просто скопировать логику удаления без подтверждения.
+            
+            deleted_count = 0
+            asset_ids = []
+            for asset in assets_to_delete:
+                asset_ids.append(asset.id)
+                if asset.original_url:
+                    self.db.mark_as_deleted(asset.original_url, reason="source_removed", phash=asset.phash)
+                if asset.image_type != "Local":
+                    if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
+                        try: os.remove(asset.thumbnail_path)
+                        except: pass
+                with self.db.get_connection() as conn:
+                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
+                    conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
+                    conn.commit()
+                deleted_count += 1
+            
+            if asset_ids:
+                self.faiss_mgr.remove_ids(asset_ids)
+            
+            logger.info(f"Removed source {path_or_domain}: {deleted_count} assets deleted")
+
+        # 3. Удаляем сам источник из таблицы sources
+        with self.db.get_connection() as conn:
+            if path_or_domain in ('archdaily', 'behance'):
+                domain = 'archdaily.com' if path_or_domain == 'archdaily' else 'behance.net'
+                conn.execute("DELETE FROM sources WHERE domain = ?", (domain,))
+            else:
+                conn.execute("DELETE FROM sources WHERE domain = ?", (path_or_domain,))
+            conn.commit()
+
+        # 4. Обновляем UI
+        self.update_sources_panel()
+        self._load_assets_for_gallery()
+        self._refresh_library()
+        self.status_label.setText(f"🗑 Источник '{path_or_domain}' удален")
 
     def _load_assets_for_gallery(self):
         # Получаем выбранные источники
@@ -513,24 +593,22 @@ class MainWindow(QMainWindow):
     def _delete_selected_asset(self):
         idx = self.library_table.currentIndex()
         if not idx.isValid(): return
-        row = idx.row()
+        
+        # Получаем объект Asset из ID в таблице
         model = self.library_table.model()
-        asset_id = model.item(row, 0).text()
-
-        reply = QMessageBox.question(self, "Delete Asset", f"Удалить ассет #{asset_id}?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            with self.db.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("SELECT original_url, phash FROM assets WHERE id = ?", (asset_id,))
-                row = cur.fetchone()
-                if row:
-                    self.db.mark_as_deleted(row['original_url'], reason="user_deleted", phash=row['phash'])
-                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset_id,))
-                conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
-                conn.commit()
-            self._load_assets_for_gallery()
-            self._refresh_library()
+        asset_id = int(model.item(idx.row(), 0).text())
+        
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM assets WHERE id = ?", (asset_id,))
+            row = cur.fetchone()
+            if row:
+                asset = Asset(
+                    id=row['id'], original_url=row['original_url'],
+                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
+                    image_type=row['image_type'] or 'Photography'
+                )
+                self._delete_assets_batch([asset])
 
     def closeEvent(self, event):
         if self.active_scraper:
@@ -771,44 +849,52 @@ class MainWindow(QMainWindow):
         asset_ids = [aid for _, aid in results]
 
         # Фильтруем по источникам
-        allowed_domains = []
-        custom_folder_domains = []
+        web_domains = []
+        folder_paths = []
 
         for src in self.search_sources:
             if src == 'archdaily':
-                allowed_domains.append('archdaily.com')
+                web_domains.append('archdaily.com')
             elif src == 'behance':
-                allowed_domains.append('behance.net')
+                web_domains.append('behance.net')
             else:
-                # Это локальная папка
-                custom_folder_domains.append(src)
+                folder_paths.append(src)
 
         with self.db.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             
-            allowed_source_ids = []
-            if allowed_domains or custom_folder_domains:
-                all_domains = allowed_domains + custom_folder_domains
-                domain_placeholders = ','.join('?' for _ in all_domains)
-                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", all_domains)
+            source_conditions = []
+            params = asset_ids.copy()
+            
+            # 1. Веб-источники
+            if web_domains:
+                domain_placeholders = ','.join('?' for _ in web_domains)
+                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", web_domains)
                 allowed_source_ids = [row['id'] for row in cur.fetchall()]
+                if allowed_source_ids:
+                    src_placeholders = ','.join('?' for _ in allowed_source_ids)
+                    source_conditions.append(f"source_id IN ({src_placeholders})")
+                    params.extend(allowed_source_ids)
+
+            # 2. Локальные папки (префикс пути)
+            if folder_paths:
+                folder_sub_conditions = []
+                for path in folder_paths:
+                    search_path = path.replace('\\', '/')
+                    if not search_path.endswith('/'): search_path += '/'
+                    folder_sub_conditions.append("REPLACE(local_path, '\\', '/') LIKE ?")
+                    params.append(search_path + "%")
+                if folder_sub_conditions:
+                    source_conditions.append(f"({' OR '.join(folder_sub_conditions)})")
 
             placeholders = ','.join('?' for _ in asset_ids)
             query = f"SELECT * FROM assets WHERE id IN ({placeholders})"
-            params = asset_ids.copy()
             
-            # Добавляем условия фильтрации источников
-            source_conditions = []
-            if allowed_source_ids:
-                src_placeholders = ','.join('?' for _ in allowed_source_ids)
-                source_conditions.append(f"source_id IN ({src_placeholders})")
-                params.extend(allowed_source_ids)
-
             if source_conditions:
                 query += " AND (" + " OR ".join(source_conditions) + ")"
             else:
-                # Если ничего не выбрано, ничего не возвращаем
+                # Если ничего не выбрано (или выбраны папки, которых нет в базе)
                 query += " AND 1=0"
             
             cur.execute(query, params)

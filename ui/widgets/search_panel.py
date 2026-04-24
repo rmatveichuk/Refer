@@ -10,6 +10,7 @@ from ui.widgets.hybrid_search_input import HybridSearchInput
 class SearchPanel(QWidget):
     search_triggered = pyqtSignal(str, str, float, list) # text, image_path, threshold, sources
     clear_triggered = pyqtSignal()
+    remove_source_requested = pyqtSignal(str) # path or domain
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -228,11 +229,20 @@ class SearchPanel(QWidget):
     def _on_context_menu(self, pos):
         item = self.sources_tree.itemAt(pos)
         if not item: return
+        
+        path = item.data(0, Qt.ItemDataRole.UserRole)
+        if not path: return
+
         menu = QMenu(self)
         menu.setStyleSheet("QMenu { background-color: #2d2d2d; color: white; border: 1px solid #444; } QMenu::item:selected { background-color: #29b6f6; color: black; }")
+        
         solo_action = menu.addAction("Выбрать только это")
         all_action = menu.addAction("Выбрать всё")
+        menu.addSeparator()
+        remove_action = menu.addAction("🗑 Удалить из списка")
+        
         action = menu.exec(self.sources_tree.viewport().mapToGlobal(pos))
+        
         if action == solo_action:
             self.sources_tree.blockSignals(True)
             def uncheck_recursive(p):
@@ -244,6 +254,8 @@ class SearchPanel(QWidget):
             self._on_source_toggled()
         elif action == all_action:
             self._clear_all()
+        elif action == remove_action:
+            self.remove_source_requested.emit(path)
 
     def _on_item_changed(self, item, column):
         self.sources_tree.blockSignals(True)

@@ -212,8 +212,14 @@ class GalleryView(QListView):
 
     @pyqtSlot(QModelIndex)
     def _on_item_clicked(self, index: QModelIndex):
-        """Открыть полноэкранный просмотрщик при ПЕРВОМ клике."""
+        """Открыть полноэкранный просмотрщик при клике, если не зажаты Shift/Ctrl."""
         if not index.isValid():
+            return
+
+        # Если зажаты Shift или Ctrl, мы просто выделяем объекты, не открывая просмотрщик
+        from PyQt6.QtWidgets import QApplication
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
             return
 
         model = self.model()
@@ -272,30 +278,32 @@ class GalleryView(QListView):
     def _delete_asset(self, asset):
         if not self.db: return
         
-        reply = QMessageBox.question(
-            self, "Удалить ассет",
-            f"Удалить ассет #{asset.id}?\n\nЭто действие необратимо.\nФайл будет удалён с диска.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            if asset.original_url:
-                self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
+        # Передаем управление в главное окно для согласованного удаления (БД + FAISS + файлы)
+        if self.parent_window and hasattr(self.parent_window, "_delete_assets_batch"):
+            self.parent_window._delete_assets_batch([asset])
+        else:
+            # Fallback если нет главного окна (упрощенное удаление)
+            reply = QMessageBox.question(
+                self, "Удалить ассет",
+                f"Удалить ассет #{asset.id}?\n\nЭто действие необратимо.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
             
-            if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
-                try:
-                    os.remove(asset.thumbnail_path)
-                except Exception as e:
-                    logger.warning(f"Failed to delete file: {e}")
-            
-            with self.db.get_connection() as conn:
-                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
-                conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
-                conn.commit()
-            
-            logger.info(f"Deleted asset #{asset.id}")
-            
-            if self.parent_window:
-                self.parent_window._load_assets_for_gallery()
-                self.parent_window._refresh_library()
-                self.parent_window.status_label.setText(f"🗑️ Ассет #{asset.id} удалён")
+            if reply == QMessageBox.StandardButton.Yes:
+                if asset.original_url:
+                    self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
+                
+                # Удаляем файл только для веба
+                if asset.image_type != "Local":
+                    if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
+                        try: os.remove(asset.thumbnail_path)
+                        except: pass
+                
+                with self.db.get_connection() as conn:
+                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
+                    conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
+                    conn.commit()
+                
+                if self.parent_window:
+                    self.parent_window._load_assets_for_gallery()
+                    self.parent_window._refresh_library()
