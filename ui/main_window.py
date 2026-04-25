@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, QPushButton, 
+    QMainWindow, QVBoxLayout, QDialog, QHBoxLayout, QWidget, QMessageBox, QPushButton, 
     QLabel, QProgressBar, QTabWidget, QTableView, QHeaderView, 
     QAbstractItemView, QMenu, QApplication
 )
@@ -10,6 +10,7 @@ from ui.widgets.gallery_view import GalleryView
 from ui.widgets.lazy_model import AssetListModel
 from ui.widgets.top_toolbar import TopToolbar
 from ui.widgets.search_panel import SearchPanel
+from ui.widgets.tag_manager import TagManagerDialog
 from database.db_manager import DatabaseManager
 from database.models import Asset
 from scrapers.manager import ScraperManager
@@ -136,6 +137,8 @@ class MainWindow(QMainWindow):
         # --- Left: Search Panel ---
         self.search_panel = SearchPanel()
         self.search_panel.search_triggered.connect(self._perform_visual_search)
+        self.search_panel.manage_tags_requested.connect(self._open_tag_manager)
+        self.search_panel.extract_tags_requested.connect(self._extract_tags_from_image)
         self.search_panel.clear_triggered.connect(self._on_clear_search)
         self.search_panel.remove_source_requested.connect(self._remove_source_folder)
         content_layout.addWidget(self.search_panel)
@@ -754,27 +757,104 @@ class MainWindow(QMainWindow):
         self._load_assets_for_gallery()
         self.status_label.setText("Сброс фильтров. Показаны все выбранные источники.")
 
-    def _perform_visual_search(self, text: str, img_path: str, threshold: float, sources: list):
-        if not text and not img_path:
+
+
+    @pyqtSlot(str)
+    def _extract_tags_from_image(self, image_path: str):
+        if not image_path:
+            return
+            
+        if self.active_searcher:
+            return
+            
+        self.status_label.setText("Анализ изображения (Zero-Shot Classification)...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
+
+        class ExtractTagsWorker(QRunnable):
+            class Signals(QObject):
+                result = pyqtSignal(list)
+                error = pyqtSignal(str)
+
+            def __init__(self, ai, img_path):
+                super().__init__()
+                self.ai = ai
+                self.img_path = img_path
+                self.signals = self.Signals()
+
+            def run(self):
+                try:
+                    if not self.ai:
+                        from ai.engine import AiEngine
+                        self.ai = AiEngine()
+                        
+                    tags = self.ai.extract_tags(self.img_path)
+                    self.signals.result.emit(tags)
+                except Exception as e:
+                    self.signals.error.emit(str(e))
+
+        worker = ExtractTagsWorker(self.ai, image_path)
+        worker.signals.result.connect(self._on_extract_tags_result)
+        worker.signals.error.connect(self._on_search_error)
+        self.active_searcher = worker
+        QThreadPool.globalInstance().start(worker)
+
+    @pyqtSlot(list)
+    def _on_extract_tags_result(self, new_tags: list):
+        self.active_searcher = None
+        self.progress_bar.setVisible(False)
+        self.status_label.setText(f"Извлечено тегов: {len(new_tags)}")
+        
+        if not new_tags:
+            return
+            
+        current_tags = set(getattr(self.search_panel, 'selected_tags', []))
+        for t in new_tags:
+            current_tags.add(t)
+            
+        self.search_panel.set_selected_tags(list(current_tags))
+        # Сразу запускаем поиск по новым тегам
+        self.search_panel._emit_search()
+
+    def _open_tag_manager(self):
+        selected_tags = getattr(self.search_panel, 'selected_tags', [])
+        dialog = TagManagerDialog(self.db, selected_tags, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_tags = dialog.get_selected_tags()
+            self.search_panel.set_selected_tags(new_tags)
+            self.search_panel._emit_search()
+
+    def _perform_visual_search(self, text: str, img_path: str, threshold: float, sources: list, tags: list = None):
+        if not text and not img_path and not tags:
             return
             
         if self.faiss_mgr.index.ntotal == 0:
             QMessageBox.warning(self, "Пустая база", "База векторов пуста. Сначала выполните индексацию.")
             return
 
-        # Prevent concurrent searches — SigLIP model is not thread-safe
+        if not text and not img_path:
+            # Only tags search
+            self.search_threshold = threshold
+            self.search_sources = sources
+            self.search_tags = tags or []
+            import numpy as np
+            self._search_vectors(np.array([], dtype=np.float32), "Search by tags")
+            return
+            
+        # Prevent concurrent searches - SigLIP model is not thread-safe
         if self.active_searcher:
             return
-
-        self.status_label.setText("🔎 Выполнение гибридного поиска...")
+            
+        self.status_label.setText("🔍 Обработка визуального запроса...")
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
         self.search_threshold = threshold
         self.search_sources = sources
+        self.search_tags = tags or []
 
         class SearchWorker(QRunnable):
             class Signals(QObject):
-                result = pyqtSignal(np.ndarray, str)
+                result = pyqtSignal(object, str)
                 error = pyqtSignal(str)
 
             def __init__(self, ai, text, img_path):
@@ -804,6 +884,9 @@ class MainWindow(QMainWindow):
                     if v_final is not None:
                         v_final = v_final.reshape(1, -1)
                         self.signals.result.emit(v_final, "гибридного запроса" if self.text and self.img_path else "запроса")
+                    else:
+                        import numpy as np
+                        self.signals.result.emit(np.array([], dtype=np.float32), "Search by tags")
                 except Exception as e:
                     self.signals.error.emit(str(e))
 
@@ -827,31 +910,9 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Ошибка поиска", error)
 
     def _search_vectors(self, vector: np.ndarray, query_info: str):
-        k = min(500, self.faiss_mgr.index.ntotal)
-        distances, ids = self.faiss_mgr.search(vector, k=k)
-
-        # self.search_threshold varies from 0.0 (Широкий) to 1.0 (Точный)
-        # For L2 normalized vectors, distance goes from 0 (identical) to 2 (orthogonal).
-        # We use an exponential curve so the slider feels intuitive:
-        #   threshold 0.0 -> max_dist 2.0  (show everything)
-        #   threshold 0.5 -> max_dist ~0.28 (moderate filtering)
-        #   threshold 1.0 -> max_dist 0.01 (only near-identical, ~100% match)
-        import math
-        max_distance = 2.0 * math.exp(-5.3 * self.search_threshold)
-
-        results = [(dist, int(aid)) for dist, aid in zip(distances, ids) if aid > 0 and dist <= max_distance]
-        
-        if not results:
-            self.status_label.setText("Ничего не найдено (попробуйте сделать поиск шире).")
-            self.gallery_model.setAssets([])
-            return
-
-        asset_ids = [aid for _, aid in results]
-
-        # Фильтруем по источникам
+        # 1. Pre-filtering: Gather IDs based on sources and tags
         web_domains = []
         folder_paths = []
-
         for src in self.search_sources:
             if src == 'archdaily':
                 web_domains.append('archdaily.com')
@@ -860,52 +921,105 @@ class MainWindow(QMainWindow):
             else:
                 folder_paths.append(src)
 
+        valid_ids = []
+        
         with self.db.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             
-            source_conditions = []
-            params = asset_ids.copy()
+            # Base query parts
+            joins = []
+            where_clauses = []
+            params = []
             
-            # 1. Веб-источники
+            # --- SOURCES FILTER ---
+            source_conditions = []
             if web_domains:
                 domain_placeholders = ','.join('?' for _ in web_domains)
                 cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", web_domains)
                 allowed_source_ids = [row['id'] for row in cur.fetchall()]
                 if allowed_source_ids:
                     src_placeholders = ','.join('?' for _ in allowed_source_ids)
-                    source_conditions.append(f"source_id IN ({src_placeholders})")
+                    source_conditions.append(f"a.source_id IN ({src_placeholders})")
                     params.extend(allowed_source_ids)
-
-            # 2. Локальные папки (префикс пути)
+            
             if folder_paths:
                 folder_sub_conditions = []
                 for path in folder_paths:
                     search_path = path.replace('\\', '/')
                     if not search_path.endswith('/'): search_path += '/'
-                    folder_sub_conditions.append("REPLACE(local_path, '\\', '/') LIKE ?")
+                    folder_sub_conditions.append("REPLACE(a.local_path, '\\', '/') LIKE ?")
                     params.append(search_path + "%")
                 if folder_sub_conditions:
                     source_conditions.append(f"({' OR '.join(folder_sub_conditions)})")
-
-            placeholders = ','.join('?' for _ in asset_ids)
-            query = f"SELECT * FROM assets WHERE id IN ({placeholders})"
-            
+                    
             if source_conditions:
-                query += " AND (" + " OR ".join(source_conditions) + ")"
+                where_clauses.append(f"({' OR '.join(source_conditions)})")
             else:
-                # Если ничего не выбрано (или выбраны папки, которых нет в базе)
-                query += " AND 1=0"
-            
+                where_clauses.append("1=0") # No valid sources selected
+
+            # --- TAGS FILTER ---
+            tags = getattr(self, 'search_tags', [])
+            if tags:
+                # We need assets that have ALL selected tags
+                # Join with asset_tags and tags, group by asset_id and count
+                joins.append("JOIN asset_tags at ON a.id = at.asset_id")
+                joins.append("JOIN tags t ON at.tag_id = t.id")
+                
+                tag_placeholders = ','.join('?' for _ in tags)
+                where_clauses.append(f"t.name IN ({tag_placeholders})")
+                params.extend(tags)
+                
+                # Build the query with GROUP BY and HAVING
+                where_sql = " AND ".join(where_clauses)
+                query = f"SELECT a.id FROM assets a {' '.join(joins)} WHERE {where_sql} GROUP BY a.id HAVING COUNT(DISTINCT t.name) = ?"
+                params.append(len(tags))
+            else:
+                # Simple query without tags
+                where_sql = " AND ".join(where_clauses)
+                query = f"SELECT a.id FROM assets a WHERE {where_sql}"
+
             cur.execute(query, params)
+            valid_ids = [row['id'] for row in cur.fetchall()]
+
+        if not valid_ids:
+            self.status_label.setText("Ничего не найдено по выбранным фильтрам (источники/теги).")
+            self.gallery_model.setAssets([])
+            return
+
+        # 2. FAISS Vector Search with pre-filtering
+        results = []
+        if vector is not None and len(vector) > 0:
+            k = min(500, len(valid_ids))
+            distances, ids = self.faiss_mgr.search(vector, k=k, valid_ids=valid_ids)
+
+            import math
+            max_distance = 2.0 * math.exp(-5.3 * self.search_threshold)
+            results = [(dist, int(aid)) for dist, aid in zip(distances, ids) if aid > 0 and dist <= max_distance]
+        else:
+            # Если нет вектора (только теги), берем все валидные ID с дистанцией 0
+            # Ограничиваем до 500 чтобы не перегружать интерфейс
+            results = [(0.0, int(aid)) for aid in valid_ids[:500]]
+        
+        if not results:
+            self.status_label.setText("Не найдено визуально похожих изображений (уменьшите строгость поиска).")
+            self.gallery_model.setAssets([])
+            return
+
+        # 3. Fetch full asset data for the results
+        final_asset_ids = [aid for _, aid in results]
+        
+        with self.db.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            placeholders = ','.join('?' for _ in final_asset_ids)
+            cur.execute(f"SELECT * FROM assets WHERE id IN ({placeholders})", final_asset_ids)
             rows = {row['id']: dict(row) for row in cur.fetchall()}
 
         search_assets = []
         for dist, aid in results:
             if aid in rows:
                 row = rows[aid]
-                # If we want to strictly apply threshold:
-                # if dist > (self.search_threshold * magic_number): continue
                 search_assets.append(Asset(
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
@@ -917,5 +1031,6 @@ class MainWindow(QMainWindow):
                 ))
 
         self.gallery_model.setAssets(search_assets)
-        self.status_label.setText(f"Найдено {len(search_assets)} совпадений")
-        self.tabs.setCurrentIndex(0) # Убедимся, что открыта галерея
+        self.status_label.setText(f"Найдено {len(search_assets)} изображений")
+        self.tabs.setCurrentIndex(0)
+

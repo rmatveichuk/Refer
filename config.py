@@ -65,3 +65,25 @@ VECTOR_DIMENSION = 1152  # Updated for so400m model
 # Hardware / Performance Constants
 THUMBNAIL_SIZE = 1024 # px
 BATCH_LOAD_SIZE = 50  # For Lazy Loading limits
+
+
+# Базовый словарь тегов для авто-тегирования (Zero-Shot Classification)
+# Вы можете редактировать этот список под свои нужды.
+TAG_VOCABULARY = {
+    "Material": [
+        "concrete", "wood", "brick", "glass", "metal", 
+        "stone", "plaster", "marble", "fabric"
+    ],
+    "Lighting": [
+        "natural light", "artificial light", "warm light", 
+        "cold light", "sunny", "overcast", "shadows", "neon"
+    ],
+    "Style": [
+        "minimalism", "industrial", "classic", "modern", 
+        "brutalism", "futuristic", "cozy", "luxurious"
+    ],
+    "Type": [
+        "exterior", "interior", "residential", "commercial", 
+        "public space", "landscape", "close-up", "furniture"
+    ]
+}

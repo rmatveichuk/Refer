@@ -1,7 +1,9 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QGuiApplication, QKeySequence, QImage
+from PyQt6.QtCore import QEvent
+import tempfile
 
 class DropZoneFrame(QFrame):
     def __init__(self, parent=None):
@@ -20,6 +22,7 @@ class DropZoneFrame(QFrame):
 
 class HybridSearchInput(QWidget):
     search_requested = pyqtSignal(str, str)
+    analyze_requested = pyqtSignal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,17 +45,62 @@ class HybridSearchInput(QWidget):
         self.lbl_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_placeholder.setStyleSheet("color: #888; font-size: 13px; border: none; background: transparent;")
 
-        self.lbl_preview = QLabel()
+# Preview layout to hold both image and button
+        self.preview_layout = QVBoxLayout()
+        self.preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_layout.setContentsMargins(0,0,0,0)
+
+        # Container for image and close button
+        self.img_container = QWidget()
+        self.img_container.setFixedSize(100, 100)
+        self.img_container.setVisible(False)
+        
+        self.lbl_preview = QLabel(self.img_container)
+        self.lbl_preview.setGeometry(0, 0, 100, 100)
         self.lbl_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_preview.setStyleSheet("border: none; background: transparent;")
-        self.lbl_preview.setVisible(False)
         
+        self.btn_remove_img = QPushButton("✕", self.img_container)
+        self.btn_remove_img.setGeometry(80, 0, 20, 20)
+        self.btn_remove_img.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_remove_img.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(0,0,0,0.6); color: white; border: none;
+                border-radius: 10px; font-weight: bold; font-size: 10px;
+                padding-bottom: 2px;
+            }
+            QPushButton:hover { background-color: #f44336; }
+        """)
+        self.btn_remove_img.clicked.connect(self.clear_image)
+        
+        self.preview_layout.addWidget(self.img_container)
+        
+
+
+        self.btn_analyze = QPushButton("✨ Авто-теги")
+        self.btn_analyze.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_analyze.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d; color: #888; 
+                border: 1px solid #444; border-radius: 4px; 
+                padding: 4px 8px; font-weight: bold; font-size: 11px;
+                margin: 0;
+            }
+            QPushButton:hover { 
+                background-color: #3d3d3d; 
+                color: #e0e0e0;
+                border-color: #666;
+            }
+        """)
+        self.btn_analyze.setVisible(False)
+        self.btn_analyze.clicked.connect(self._on_analyze_clicked)
+
         self.drop_layout.addStretch()
         self.drop_layout.addWidget(self.lbl_placeholder)
-        self.drop_layout.addWidget(self.lbl_preview)
+        self.drop_layout.addLayout(self.preview_layout)
         self.drop_layout.addStretch()
 
-        # Connect events
+# Connect events
         self.drop_zone.dragEnterEvent = self._dragEnterEvent
         self.drop_zone.dragLeaveEvent = self._dragLeaveEvent
         self.drop_zone.dropEvent = self._dropEvent
@@ -73,6 +121,11 @@ class HybridSearchInput(QWidget):
         """)
         self.text_input.returnPressed.connect(self._on_enter)
         self.layout.addWidget(self.text_input)
+
+        # Enable Paste support
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.drop_zone.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.text_input.installEventFilter(self)
 
     def _dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -97,6 +150,11 @@ class HybridSearchInput(QWidget):
             event.acceptProposedAction()
             self.set_image(file_path)
 
+
+    def _on_analyze_clicked(self):
+        if self.image_path:
+            self.analyze_requested.emit(self.image_path)
+
     def set_image(self, path: str):
         self.image_path = path
         pixmap = QPixmap(path)
@@ -108,13 +166,14 @@ class HybridSearchInput(QWidget):
             )
             self.lbl_preview.setPixmap(scaled)
             self.lbl_placeholder.setVisible(False)
-            self.lbl_preview.setVisible(True)
+            self.img_container.setVisible(True)
+            self.btn_analyze.setVisible(True)
             self.text_input.setPlaceholderText("Уточняющий запрос к картинке...")
 
     def clear_image(self):
         self.image_path = ""
         self.lbl_preview.clear()
-        self.lbl_preview.setVisible(False)
+        self.img_container.setVisible(False)
         self.lbl_placeholder.setVisible(True)
         self.text_input.setPlaceholderText("Или введите поисковый запрос...")
 
@@ -124,3 +183,35 @@ class HybridSearchInput(QWidget):
 
     def _on_enter(self):
         self.search_requested.emit(self.text_input.text().strip(), self.image_path)
+
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            if event.matches(QKeySequence.StandardKey.Paste):
+                if self._handle_paste():
+                    return True # Intercept paste if it was an image
+        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Paste):
+            if self._handle_paste():
+                return
+        super().keyPressEvent(event)
+
+    def _handle_paste(self):
+        clipboard = QGuiApplication.clipboard()
+        mime = clipboard.mimeData()
+        
+        if mime.hasImage():
+            image = clipboard.image()
+            if not image.isNull():
+                temp_path = os.path.join(tempfile.gettempdir(), "refer_pasted_image.jpg")
+                image.save(temp_path, "JPG")
+                self.set_image(temp_path)
+                return True
+        elif mime.hasUrls():
+            urls = mime.urls()
+            if urls and urls[0].toLocalFile().lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                self.set_image(urls[0].toLocalFile())
+                return True
+        return False
