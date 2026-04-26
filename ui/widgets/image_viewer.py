@@ -3,9 +3,12 @@ from PyQt6.QtWidgets import (
     QToolBar, QStatusBar, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 )
 from PyQt6.QtCore import Qt, QRectF, QSize
-from PyQt6.QtGui import QPixmap, QPainter, QImage, QWheelEvent, QMouseEvent, QKeyEvent, QKeySequence
+from PyQt6.QtGui import QPixmap, QPainter, QImage, QWheelEvent, QMouseEvent, QKeyEvent, QKeySequence, QFont
+from PyQt6.QtWidgets import QDockWidget, QTextEdit
 
 import logging
+import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,8 +68,10 @@ class ZoomableImageView(QGraphicsView):
 class ImageViewerWindow(QMainWindow):
     """Окно просмотра изображения в полном размере."""
 
-    def __init__(self):
+    def __init__(self, db=None, parent_window=None):
         super().__init__()
+        self.db = db
+        self.parent_window = parent_window
         self.setWindowTitle("Refer — Image Viewer")
         self.resize(1200, 800)
         self.setStyleSheet("background-color: #0a0a0a;")
@@ -82,8 +87,23 @@ class ImageViewerWindow(QMainWindow):
 
         self.viewer = ZoomableImageView(self)
         layout.addWidget(self.viewer)
-
         self.setCentralWidget(central)
+
+        # Описание от ИИ в Dock-панели (снизу)
+        self.dock = QDockWidget("ИИ Описание" if config.CURRENT_LANGUAGE == "ru" else "AI Description", self)
+        self.dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea)
+        self.desc_view = QTextEdit()
+        self.desc_view.setReadOnly(True)
+        self.desc_view.setStyleSheet("""
+            QTextEdit {
+                background-color: #121212; color: #eee; border: none;
+                padding: 15px; font-size: 14px; line-height: 1.5;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+            }
+        """)
+        self.dock.setWidget(self.desc_view)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dock)
+        self.dock.setVisible(False)
 
         # Тулбар
         toolbar = QToolBar()
@@ -132,6 +152,23 @@ class ImageViewerWindow(QMainWindow):
         self.btn_open_folder.clicked.connect(self._open_in_folder)
         toolbar.addWidget(self.btn_open_folder)
 
+        toolbar.addSeparator()
+
+        self.btn_fav = QPushButton("☆ В избранное")
+        self.btn_fav.clicked.connect(self._toggle_favorite)
+        toolbar.addWidget(self.btn_fav)
+
+        self.btn_ai = QPushButton("🤖 ИИ-Анализ")
+        self.btn_ai.clicked.connect(self._trigger_ai_analysis)
+        toolbar.addWidget(self.btn_ai)
+
+        self.btn_toggle_desc = QPushButton("📝 Текст")
+        self.btn_toggle_desc.setCheckable(True)
+        self.btn_toggle_desc.toggled.connect(self.dock.setVisible)
+        self.dock.visibilityChanged.connect(self.btn_toggle_desc.setChecked)
+        self.btn_toggle_desc_action = toolbar.addWidget(self.btn_toggle_desc)
+        self.btn_toggle_desc_action.setVisible(False) # Скрыта по умолчанию
+
         # Статус-бар
         self.status = QStatusBar()
         self.setStatusBar(self.status)
@@ -164,6 +201,8 @@ class ImageViewerWindow(QMainWindow):
             0
         )
         self.setWindowTitle(f"Refer — {asset.original_url.split('/')[-1]}  ({self.current_index + 1}/{len(self.assets)})")
+
+        self._update_ui_state()
 
         import os
         # Нормализуем путь
@@ -268,6 +307,61 @@ class ImageViewerWindow(QMainWindow):
                 subprocess.run(['xdg-open', os.path.dirname(path)])
         else:
             logger.warning(f"Файл не найден на диске: {path}")
+
+    def _update_ui_state(self):
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+            
+        asset = self.assets[self.current_index]
+        if self.db:
+            asset.is_favorite = self.db.is_favorite(asset.id)
+            desc = self.db.get_description(asset.id)
+            
+            if asset.is_favorite:
+                self.btn_fav.setText("⭐ В избранном")
+                self.btn_fav.setStyleSheet("color: #ffeb3b;")
+            else:
+                self.btn_fav.setText("☆ В избранное")
+                self.btn_fav.setStyleSheet("")
+                
+            if desc and desc.strip():
+                self.desc_view.setMarkdown(desc)
+                self.btn_toggle_desc_action.setVisible(True)
+            else:
+                self.desc_view.clear()
+                self.btn_toggle_desc_action.setVisible(False)
+                self.btn_toggle_desc.setChecked(False)
+                self.dock.setVisible(False)
+
+    def _toggle_favorite(self):
+        if not self.db or self.current_index < 0: return
+        asset = self.assets[self.current_index]
+        new_status = self.db.toggle_favorite(asset.id)
+        asset.is_favorite = new_status
+        self._update_ui_state()
+        
+        # Обновляем UI в главном окне
+        if self.parent_window and hasattr(self.parent_window, "library_table"):
+            # It's better to tell the gallery to refresh
+            if hasattr(self.parent_window, "search_panel"):
+                # Ideally emit a signal, for now we can just rely on the user refreshing 
+                pass
+
+    def _trigger_ai_analysis(self):
+        if self.current_index < 0 or not self.parent_window: return
+        asset = self.assets[self.current_index]
+        if hasattr(self.parent_window, "start_batch_ai_analysis"):
+            self.parent_window.start_batch_ai_analysis([asset])
+            self.desc_view.setPlainText("⏳ ИИ анализирует изображение... Пожалуйста, подождите.")
+            self.btn_toggle_desc_action.setVisible(True)
+            self.btn_toggle_desc.setChecked(True)
+            self.dock.setVisible(True)
+            self.status.showMessage("⏳ Отправлено на ИИ-анализ...", 3000)
+
+    def update_description(self, asset_id: int, description: str):
+        """Called externally when AI analysis finishes."""
+        if self.current_index >= 0 and self.assets[self.current_index].id == asset_id:
+            self._update_ui_state()
 
     def showEvent(self, event):
         super().showEvent(event)

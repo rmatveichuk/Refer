@@ -164,6 +164,7 @@ class MainWindow(QMainWindow):
         
         # --- We will add the buttons as "fake tabs" instead ---
         self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs.tabBarClicked.connect(self._on_tab_clicked)
         self._previous_tab_index = 0
         content_layout.addWidget(self.tabs, 1)
 
@@ -176,7 +177,20 @@ class MainWindow(QMainWindow):
 
         self._setup_gallery_tab()
         self._setup_library_tab()
+        
+        # Add actions tabs in EXACT order
+        self.tabs.addTab(QWidget(), tr("favorites"))
+        self.tabs.addTab(QWidget(), tr("select_all"))
+        self.tabs.addTab(QWidget(), tr("delete"))
+        
         self.retranslate_ui()
+
+    def _on_tab_clicked(self, index):
+        tab_text = self.tabs.tabText(index)
+        if tab_text in (tr("gallery"), "Галерея", "Gallery"):
+            self._load_assets_for_gallery()
+            self.status_label.setText(f"Галерея: Загружены все изображения ({len(self.gallery_model.assets)})")
+
     def _on_tab_changed(self, index):
         tab_text = self.tabs.tabText(index)
         if tab_text in (tr("select_all"), "Выделить все", "Select All"):
@@ -185,6 +199,9 @@ class MainWindow(QMainWindow):
         elif tab_text in (tr("delete"), "Удалить", "Delete"):
             self.tabs.setCurrentIndex(self._previous_tab_index)
             self._delete_selected_gallery()
+        elif tab_text in (tr("favorites"), "Избранное", "Favorites"):
+            self.tabs.setCurrentIndex(self._previous_tab_index)
+            self._filter_favorites()
         else:
             self._previous_tab_index = index
 
@@ -200,6 +217,33 @@ class MainWindow(QMainWindow):
         indexes = selection_model.selectedIndexes()
         assets_to_delete = [self.gallery_model.assets[idx.row()] for idx in indexes]
         self._delete_assets_batch(assets_to_delete)
+
+    def _filter_favorites(self):
+        """Фильтрует галерею, оставляя только избранные ассеты."""
+        import sqlite3
+        from database.models import Asset
+        
+        favorites = []
+        with self.db.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM assets WHERE is_favorite = 1 ORDER BY created_at DESC")
+            for row_raw in cur.fetchall():
+                row = dict(row_raw)
+                favorites.append(Asset(
+                    id=row['id'], original_url=row['original_url'],
+                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
+                    width=row['width'], height=row['height'],
+                    category=row.get('category', '3d_render'),
+                    image_type=row.get('image_type', 'Photography'),
+                    local_path=row.get('local_path', ''),
+                    is_favorite=bool(row.get('is_favorite', 0)),
+                    description=row.get('description', '')
+                ))
+        
+        self.gallery_model.setAssets(favorites)
+        self.status_label.setText(f"⭐ Избранное: {len(favorites)} изображений")
+        self.tabs.setCurrentIndex(0) # Переключаемся на вкладку Галерея
 
     def _setup_gallery_tab(self):
         gallery_tab = QWidget()
@@ -239,10 +283,6 @@ class MainWindow(QMainWindow):
 
         library_layout.addWidget(self.library_table)
         self.tabs.addTab(library_tab, tr("table"))
-        
-        # Fake tabs for actions
-        self.tabs.addTab(QWidget(), tr("select_all"))
-        self.tabs.addTab(QWidget(), tr("delete"))
 
     def _delete_assets_batch(self, assets: list):
         """Централизованное удаление списка ассетов (БД + FAISS + файлы)."""
@@ -628,8 +668,9 @@ class MainWindow(QMainWindow):
     def retranslate_ui(self):
         self.tabs.setTabText(0, tr("gallery"))
         self.tabs.setTabText(1, tr("table"))
-        self.tabs.setTabText(2, tr("select_all"))
-        self.tabs.setTabText(3, tr("delete"))
+        self.tabs.setTabText(2, tr("favorites"))
+        self.tabs.setTabText(3, tr("select_all"))
+        self.tabs.setTabText(4, tr("delete"))
         
         self.status_label.setText(tr("ready"))
         self.search_panel.retranslate_ui()
@@ -1131,3 +1172,83 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Найдено {len(search_assets)} изображений")
         self.tabs.setCurrentIndex(0)
 
+    # === LM Studio / AI Integration ===
+
+    def start_batch_ai_analysis(self, assets):
+        """Starts background AI analysis for a list of assets."""
+        if not hasattr(self, '_llm_client'):
+            from ai.llm_client import LlmClient
+            self._llm_client = LlmClient()
+
+        if not assets:
+            return
+
+        class LlmSignals(QObject):
+            progress = pyqtSignal(int, int) # current, total
+            finished_asset = pyqtSignal(int, str) # asset_id, description
+            finished_all = pyqtSignal()
+            error = pyqtSignal(str)
+
+        class LlmWorker(QRunnable):
+            def __init__(self, client, assets, db):
+                super().__init__()
+                self.client = client
+                self.assets = assets
+                self.db = db
+                self.signals = LlmSignals()
+
+            def run(self):
+                total = len(self.assets)
+                for i, asset in enumerate(self.assets):
+                    self.signals.progress.emit(i + 1, total)
+                    try:
+                        # Find the best local path to analyze
+                        path = asset.thumbnail_path if asset.thumbnail_path else asset.local_path
+                        if path and path.startswith('file:///'):
+                            path = path[8:]
+                            
+                        if not path:
+                            logger.warning(f"No path for asset {asset.id}")
+                            continue
+
+                        desc = self.client.analyze_image(path)
+                        
+                        if not desc.startswith("Ошибка"):
+                            self.db.set_description(asset.id, desc)
+                            self.signals.finished_asset.emit(asset.id, desc)
+                        else:
+                            self.signals.error.emit(f"Asset {asset.id}: {desc}")
+
+                    except Exception as e:
+                        logger.error(f"Error analyzing asset {asset.id}: {e}")
+                        self.signals.error.emit(str(e))
+                
+                self.signals.finished_all.emit()
+
+        self.status_label.setText(f"⏳ Анализ {len(assets)} изображений (LM Studio)...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setMaximum(len(assets))
+        self.progress_bar.setValue(0)
+
+        worker = LlmWorker(self._llm_client, assets, self.db)
+        worker.signals.progress.connect(lambda cur, tot: self.progress_bar.setValue(cur))
+        
+        def on_finished_asset(asset_id, desc):
+            # If the viewer is open, update its description
+            if getattr(self.gallery, "_viewer_window", None):
+                self.gallery._viewer_window.update_description(asset_id, desc)
+                
+        worker.signals.finished_asset.connect(on_finished_asset)
+        
+        def on_finished_all():
+            self.progress_bar.setVisible(False)
+            self.status_label.setText(f"✅ Анализ завершен ({len(assets)} изобр.)")
+            
+        worker.signals.finished_all.connect(on_finished_all)
+        
+        def on_error(err):
+            logger.error(f"LLM Worker error: {err}")
+            
+        worker.signals.error.connect(on_error)
+
+        QThreadPool.globalInstance().start(worker)

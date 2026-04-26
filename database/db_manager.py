@@ -135,6 +135,11 @@ class DatabaseManager:
             except sqlite3.OperationalError:
                 pass
 
+            try:
+                conn.execute("ALTER TABLE assets ADD COLUMN description TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
+
             conn.commit()
 
     # === Tag operations ===
@@ -465,4 +470,18 @@ class DatabaseManager:
             cur.execute("SELECT COUNT(*) as cnt FROM deleted_assets")
             return cur.fetchone()['cnt']
 
+    # === Description operations ===
+    
+    def set_description(self, asset_id: int, description: str):
+        """Устанавливает текстовое описание (ИИ) для ассета."""
+        with self.get_connection() as conn:
+            conn.execute("UPDATE assets SET description = ? WHERE id = ?", (description, asset_id))
+            conn.commit()
 
+    def get_description(self, asset_id: int) -> str:
+        """Возвращает текстовое описание ассета."""
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT description FROM assets WHERE id = ?", (asset_id,))
+            row = cur.fetchone()
+            return row['description'] if row else ""

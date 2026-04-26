@@ -64,13 +64,11 @@ class GalleryDelegate(QStyledItemDelegate):
             self.hovered_index = index
             painter.fillRect(cell, QColor(0, 0, 0, 100)) # Dark overlay
             
-            fav_rect, del_rect = self._get_button_rects(option.rect)
-
-            # Draw Fav Button
-            fav_color = QColor("#ffeb3b") if asset.is_favorite else QColor(255, 255, 255, 180)
-            self._draw_circle_btn(painter, fav_rect, fav_color, "⭐" if asset.is_favorite else "☆")
-
             # Draw Delete Button
+            # We only show delete button on hover now
+            top_right_x = option.rect.right() - 8 - self.btn_size
+            top_right_y = option.rect.top() + 8
+            del_rect = QRectF(top_right_x, top_right_y, self.btn_size, self.btn_size)
             self._draw_circle_btn(painter, del_rect, QColor(244, 67, 54, 180), "🗑")
 
         painter.restore()
@@ -86,16 +84,6 @@ class GalleryDelegate(QStyledItemDelegate):
         painter.setFont(font)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
-    def _get_button_rects(self, option_rect):
-        # Top right corner with some padding
-        top_right_x = option_rect.right() - 8 - self.btn_size
-        top_right_y = option_rect.top() + 8
-        
-        del_rect = QRectF(top_right_x, top_right_y, self.btn_size, self.btn_size)
-        fav_rect = QRectF(top_right_x - self.btn_size - self.spacing, top_right_y, self.btn_size, self.btn_size)
-        
-        return fav_rect, del_rect
-
     def editorEvent(self, event, model, option, index):
         """Перехват кликов по иконкам, чтобы не срабатывало выделение/открытие."""
         if event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
@@ -103,19 +91,12 @@ class GalleryDelegate(QStyledItemDelegate):
             if not asset:
                 return False
 
-            fav_rect, del_rect = self._get_button_rects(option.rect)
+            top_right_x = option.rect.right() - 8 - self.btn_size
+            top_right_y = option.rect.top() + 8
+            del_rect = QRectF(top_right_x, top_right_y, self.btn_size, self.btn_size)
             pos = event.position()
             
-            if fav_rect.contains(pos):
-                if event.type() == QEvent.Type.MouseButtonRelease:
-                    # Parent view will handle the logic via custom signals ideally, 
-                    # but we can call a method on the view if we cast parent()
-                    view = self.parent()
-                    if hasattr(view, '_toggle_favorite'):
-                        view._toggle_favorite(asset)
-                return True # Event handled
-
-            elif del_rect.contains(pos):
+            if del_rect.contains(pos):
                 if event.type() == QEvent.Type.MouseButtonRelease:
                     view = self.parent()
                     if hasattr(view, '_delete_asset'):
@@ -231,7 +212,7 @@ class GalleryView(QListView):
         start_idx = index.row()
 
         if self._viewer_window is None:
-            self._viewer_window = ImageViewerWindow()
+            self._viewer_window = ImageViewerWindow(self.db, self.parent_window)
         self._viewer_window.set_assets(assets, start_idx)
         self._viewer_window.show()
         self._viewer_window.raise_()
@@ -245,21 +226,49 @@ class GalleryView(QListView):
         model = self.model()
         if not isinstance(model, AssetListModel):
             return
-        
-        asset = model.assets[index.row()]
+            
         menu = QMenu(self)
         
-        is_fav = False
-        if self.db:
-            is_fav = self.db.is_favorite(asset.id)
+        # Check if multiple items are selected
+        selected_indexes = self.selectionModel().selectedIndexes()
         
-        fav_action = menu.addAction("⭐ В избранное" if not is_fav else "💔 Убрать из избранного")
-        fav_action.triggered.connect(lambda: self._toggle_favorite(asset))
-        
-        menu.addSeparator()
-        
-        delete_action = menu.addAction("🗑️ Удалить")
-        delete_action.triggered.connect(lambda: self._delete_asset(asset))
+        if len(selected_indexes) > 1:
+            selected_assets = [model.assets[idx.row()] for idx in selected_indexes]
+            
+            ai_menu = menu.addMenu("🤖 ИИ-анализ")
+            
+            # 1. Все выбранные
+            all_action = ai_menu.addAction(f"Анализировать все выбранные ({len(selected_assets)})")
+            all_action.triggered.connect(lambda: self._batch_ai_analyze(selected_assets))
+            
+            # 2. Только Веб (где есть URL)
+            web_assets = [a for a in selected_assets if a.original_url and a.original_url.startswith('http')]
+            if web_assets and len(web_assets) < len(selected_assets):
+                web_action = ai_menu.addAction(f"Только веб-изображения ({len(web_assets)})")
+                web_action.triggered.connect(lambda: self._batch_ai_analyze(web_assets))
+            
+            # 3. Только без описания
+            # Note: asset objects in model might not have description updated, so we check DB status
+            # But for simplicity let's just add the action and filter inside _batch_ai_analyze or here
+            needed_assets = [a for a in selected_assets if not getattr(a, 'description', None)]
+            if needed_assets and len(needed_assets) > 0:
+                needed_action = ai_menu.addAction(f"Только без описания ({len(needed_assets)})")
+                needed_action.triggered.connect(lambda: self._batch_ai_analyze(needed_assets))
+
+            menu.addSeparator()
+            
+            delete_action = menu.addAction(f"🗑️ Удалить ({len(selected_assets)})")
+            delete_action.triggered.connect(lambda: self._delete_assets(selected_assets))
+        else:
+            asset = model.assets[index.row()]
+            
+            ai_action = menu.addAction("🤖 ИИ-анализ (LM Studio)")
+            ai_action.triggered.connect(lambda: self._batch_ai_analyze([asset]))
+            
+            menu.addSeparator()
+            
+            delete_action = menu.addAction("🗑️ Удалить")
+            delete_action.triggered.connect(lambda: self._delete_asset(asset))
         
         menu.exec(self.viewport().mapToGlobal(pos))
 
@@ -275,12 +284,18 @@ class GalleryView(QListView):
         if self.parent_window:
             self.parent_window.status_label.setText(f"⭐ Ассет #{asset.id} {status} избранного")
 
-    def _delete_asset(self, asset):
+    def _delete_assets(self, assets):
         if not self.db: return
-        
-        # Передаем управление в главное окно для согласованного удаления (БД + FAISS + файлы)
         if self.parent_window and hasattr(self.parent_window, "_delete_assets_batch"):
-            self.parent_window._delete_assets_batch([asset])
+            self.parent_window._delete_assets_batch(assets)
+            
+    def _delete_asset(self, asset):
+        self._delete_assets([asset])
+
+    def _batch_ai_analyze(self, assets):
+        """Passes the request to the main window to handle background processing."""
+        if self.parent_window and hasattr(self.parent_window, "start_batch_ai_analysis"):
+            self.parent_window.start_batch_ai_analysis(assets)
         else:
             # Fallback если нет главного окна (упрощенное удаление)
             reply = QMessageBox.question(

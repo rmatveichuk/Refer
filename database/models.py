@@ -37,4 +37,5 @@ class Asset:
     category: str = "3d_render"  # "3d_render" или "photography"
     image_type: str = "Photography"
     is_favorite: bool = False  # Избранное
+    description: str = "" # ИИ-описание
     tags: List[Tag] = field(default_factory=list)

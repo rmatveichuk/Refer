@@ -2,11 +2,12 @@
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QLabel, QGroupBox
+    QPushButton, QLabel, QGroupBox, QLineEdit, QTextEdit, QMessageBox
 )
 import config
 from ui.translations import tr
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QSettings
+from ai.llm_client import LlmClient
 
 class SettingsDialog(QDialog):
     """Simple settings dialog."""
@@ -18,6 +19,8 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(400)
         self.setModal(True)
         
+        self.settings = QSettings("ReferApp", "ReferSettings")
+        self.llm_client = LlmClient()
         self._init_ui()
     
     def _init_ui(self):
@@ -43,6 +46,41 @@ class SettingsDialog(QDialog):
         storage_layout.addWidget(self.storage_info)
         self.storage_group.setLayout(storage_layout)
         layout.addWidget(self.storage_group)
+        
+        # === LM Studio (LLM/VLM) ===
+        self.lm_group = QGroupBox("LM Studio API")
+        lm_layout = QVBoxLayout()
+        
+        # URL
+        url_layout = QHBoxLayout()
+        url_layout.addWidget(QLabel("API URL:"))
+        self.url_input = QLineEdit()
+        self.url_input.setText(self.settings.value("lm_studio_url", self.llm_client.default_url))
+        url_layout.addWidget(self.url_input)
+        lm_layout.addLayout(url_layout)
+        
+        # Model
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel("Model:"))
+        self.model_input = QLineEdit()
+        self.model_input.setText(self.settings.value("lm_studio_model", self.llm_client.default_model))
+        model_layout.addWidget(self.model_input)
+        lm_layout.addLayout(model_layout)
+        
+        # Prompt
+        lm_layout.addWidget(QLabel(tr("prompt") if "prompt" in config.CURRENT_LANGUAGE else "System Prompt:"))
+        self.prompt_input = QTextEdit()
+        self.prompt_input.setMaximumHeight(60)
+        self.prompt_input.setText(self.settings.value("lm_studio_prompt", self.llm_client.default_prompt))
+        lm_layout.addWidget(self.prompt_input)
+        
+        # Test Button
+        self.btn_test_lm = QPushButton("Проверить подключение" if config.CURRENT_LANGUAGE == "ru" else "Test Connection")
+        self.btn_test_lm.clicked.connect(self._test_lm_connection)
+        lm_layout.addWidget(self.btn_test_lm)
+        
+        self.lm_group.setLayout(lm_layout)
+        layout.addWidget(self.lm_group)
         
         # === Localization ===
         self.lang_group = QGroupBox("Локализация" if config.CURRENT_LANGUAGE == "ru" else "Localization")
@@ -79,7 +117,7 @@ class SettingsDialog(QDialog):
             }
             QPushButton:hover { background-color: #666; }
         """)
-        self.close_btn.clicked.connect(self.accept)
+        self.close_btn.clicked.connect(self._on_close)
         button_layout.addWidget(self.close_btn)
         
         layout.addLayout(button_layout)
@@ -103,6 +141,7 @@ class SettingsDialog(QDialog):
         self.ai_group.setTitle(tr("ai_engine"))
         self.storage_group.setTitle(tr("storage"))
         self.lang_group.setTitle("Локализация" if config.CURRENT_LANGUAGE == "ru" else "Localization")
+        self.btn_test_lm.setText("Проверить подключение" if config.CURRENT_LANGUAGE == "ru" else "Test Connection")
         self.close_btn.setText(tr("close"))
         self._update_ai_info()
         self._update_storage_info()
@@ -112,3 +151,20 @@ class SettingsDialog(QDialog):
         config.CURRENT_LANGUAGE = new_lang
         self.language_changed.emit(new_lang)
         self.retranslate_ui()
+
+    def _test_lm_connection(self):
+        # Save temp settings to client
+        self.settings.setValue("lm_studio_url", self.url_input.text().strip())
+        success, msg = self.llm_client.test_connection()
+        
+        if success:
+            QMessageBox.information(self, "LM Studio", msg)
+        else:
+            QMessageBox.warning(self, "LM Studio", msg)
+            
+    def _on_close(self):
+        # Save settings
+        self.settings.setValue("lm_studio_url", self.url_input.text().strip())
+        self.settings.setValue("lm_studio_model", self.model_input.text().strip())
+        self.settings.setValue("lm_studio_prompt", self.prompt_input.toPlainText().strip())
+        self.accept()
