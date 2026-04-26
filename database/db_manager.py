@@ -168,18 +168,115 @@ class DatabaseManager:
             """, (asset_id,))
             return [row['name'] for row in cur.fetchall()]
 
-    def get_all_tags(self) -> Dict[str, int]:
+    def get_all_tags(self, limit: int = 50) -> Dict[str, int]:
         """Возвращает все теги с количеством ассетов. {tag_name: count}"""
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(f"""
                 SELECT t.name, COUNT(at.asset_id) as cnt
                 FROM tags t
                 LEFT JOIN asset_tags at ON t.id = at.tag_id
                 GROUP BY t.id
                 ORDER BY cnt DESC, t.name
+                LIMIT {limit}
             """)
             return {row['name']: row['cnt'] for row in cur.fetchall()}
+
+    def get_related_tags(self, selected_tags: List[str], limit: int = 50) -> Dict[str, int]:
+        """Возвращает теги, которые встречаются вместе с указанными (и их количество)."""
+        if not selected_tags:
+            return self.get_all_tags(limit=limit)
+            
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            placeholders = ','.join('?' for _ in selected_tags)
+            cur.execute(f"""
+                SELECT t.name, COUNT(at.asset_id) as cnt
+                FROM tags t
+                JOIN asset_tags at ON t.id = at.tag_id
+                WHERE at.asset_id IN (
+                    SELECT at2.asset_id 
+                    FROM asset_tags at2
+                    JOIN tags t2 ON t2.id = at2.tag_id
+                    WHERE t2.name IN ({placeholders})
+                    GROUP BY at2.asset_id
+                    HAVING COUNT(DISTINCT t2.name) = ?
+                )
+                AND t.name NOT IN ({placeholders})
+                GROUP BY t.id
+                ORDER BY cnt DESC, t.name
+                LIMIT {limit}
+            """, (*selected_tags, len(selected_tags), *selected_tags))
+            return {row['name']: row['cnt'] for row in cur.fetchall()}
+
+    def get_contextual_suggestions(self, selected_tags: List[str], search_text: str = "", limit: int = 20) -> Dict[str, int]:
+        """Умные подсказки тегов на основе контекста и ввода."""
+        search_text = search_text.lower().strip()
+        
+        # Список тегов, которые не несут смысловой нагрузки или слишком общие
+        generic_blacklist = [
+            'projects', 'selected projects', 'built projects', 
+            'metaverse', 'technology', 'sustainability', 
+            'materials', 'all projects'
+        ]
+        
+        if not selected_tags and not search_text:
+            # Root level: Prefer main categories
+            # We can hardcode priority for 'exterior' and 'interior'
+            all_tags = self.get_all_tags(limit=limit * 2)
+            # Sort so exterior/interior are first if they exist
+            priority = ['exterior', 'interior', 'architecture', 'render', 'furniture']
+            
+            # Filter out blacklisted tags
+            filtered_tags = {k: v for k, v in all_tags.items() if k not in generic_blacklist}
+            
+            sorted_tags = sorted(
+                filtered_tags.items(), 
+                key=lambda x: (x[0] not in priority, priority.index(x[0]) if x[0] in priority else 0, -x[1])
+            )
+            return dict(sorted_tags[:limit])
+            
+        if search_text:
+            # Filtering existing tags by prefix/substring
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                # If tags are selected, search only among related tags
+                if selected_tags:
+                    placeholders = ','.join('?' for _ in selected_tags)
+                    cur.execute(f"""
+                        SELECT t.name, COUNT(at.asset_id) as cnt
+                        FROM tags t
+                        JOIN asset_tags at ON t.id = at.tag_id
+                        WHERE at.asset_id IN (
+                            SELECT at2.asset_id FROM asset_tags at2
+                            JOIN tags t2 ON t2.id = at2.tag_id
+                            WHERE t2.name IN ({placeholders})
+                            GROUP BY at2.asset_id
+                            HAVING COUNT(DISTINCT t2.name) = ?
+                        )
+                        AND t.name LIKE ?
+                        AND t.name NOT IN ({placeholders})
+                        AND t.name NOT IN ({','.join('?' for _ in generic_blacklist)})
+                        GROUP BY t.id
+                        ORDER BY cnt DESC
+                        LIMIT {limit}
+                    """, (*selected_tags, len(selected_tags), f"%{search_text}%", *selected_tags, *generic_blacklist))
+                else:
+                    cur.execute(f"""
+                        SELECT t.name, COUNT(at.asset_id) as cnt
+                        FROM tags t
+                        LEFT JOIN asset_tags at ON t.id = at.tag_id
+                        WHERE t.name LIKE ?
+                        AND t.name NOT IN ({','.join('?' for _ in generic_blacklist)})
+                        GROUP BY t.id
+                        ORDER BY cnt DESC
+                        LIMIT {limit}
+                    """, (f"%{search_text}%", *generic_blacklist))
+                return {row['name']: row['cnt'] for row in cur.fetchall()}
+        
+        related = self.get_related_tags(selected_tags, limit=limit + len(generic_blacklist))
+        filtered = {k: v for k, v in related.items() if k not in generic_blacklist}
+        return dict(list(filtered.items())[:limit])
 
     def get_assets_by_tag(self, tag_names: List[str]) -> List[int]:
         """Возвращает ID ассетов, у которых есть ВСЕ указанные теги."""

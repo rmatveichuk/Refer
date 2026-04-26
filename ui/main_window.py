@@ -11,6 +11,8 @@ from ui.widgets.lazy_model import AssetListModel
 from ui.widgets.top_toolbar import TopToolbar
 from ui.widgets.search_panel import SearchPanel
 from ui.widgets.tag_manager import TagManagerDialog
+from ui.widgets.tag_chip import TagChip
+from ui.widgets.flow_layout import FlowLayout
 from database.db_manager import DatabaseManager
 from database.models import Asset
 from scrapers.manager import ScraperManager
@@ -136,7 +138,7 @@ class MainWindow(QMainWindow):
 
         # --- Left: Search Panel ---
         self.search_panel = SearchPanel()
-        self.search_panel.search_triggered.connect(self._perform_visual_search)
+        self.search_panel.search_triggered.connect(self._update_breadcrumbs)
         self.search_panel.manage_tags_requested.connect(self._open_tag_manager)
         self.search_panel.extract_tags_requested.connect(self._extract_tags_from_image)
         self.search_panel.clear_triggered.connect(self._on_clear_search)
@@ -154,8 +156,14 @@ class MainWindow(QMainWindow):
         # --- We will add the buttons as "fake tabs" instead ---
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self._previous_tab_index = 0
-        
         content_layout.addWidget(self.tabs, 1)
+
+        # --- Breadcrumbs as Corner Widget ---
+        self.breadcrumbs_widget = QWidget()
+        self.breadcrumbs_layout = QHBoxLayout(self.breadcrumbs_widget)
+        self.breadcrumbs_layout.setContentsMargins(10, 0, 10, 0)
+        self.breadcrumbs_layout.setSpacing(10)
+        self.tabs.setCornerWidget(self.breadcrumbs_widget, Qt.Corner.TopRightCorner)
 
         self._setup_gallery_tab()
         self._setup_library_tab()
@@ -752,10 +760,9 @@ class MainWindow(QMainWindow):
     # === Search Logic ===
 
     def _on_clear_search(self):
-        # Восстанавливаем оригинальный вызов
-        # Поиск очищается, источники включены все, загружаем галерею с учетом источников
         self._load_assets_for_gallery()
         self.status_label.setText("Сброс фильтров. Показаны все выбранные источники.")
+        self._update_breadcrumbs() # Clear breadcrumbs
 
 
 
@@ -823,6 +830,74 @@ class MainWindow(QMainWindow):
             new_tags = dialog.get_selected_tags()
             self.search_panel.set_selected_tags(new_tags)
             self.search_panel._emit_search()
+
+    def _update_breadcrumbs(self, text=None, img_path=None, threshold=None, sources=None, tags=None):
+        """Обновляет полосу хлебных крошек в углу вкладок."""
+        if text is None:
+            text = self.search_panel.hybrid_input.text_input.text().strip()
+            img_path = self.search_panel.hybrid_input.image_path
+            tags = getattr(self.search_panel, 'selected_tags', [])
+
+        # Clear layout
+        while self.breadcrumbs_layout.count():
+            item = self.breadcrumbs_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        def add_text_crumb(label, filter_type, val=None):
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            
+            lbl = QLabel(label)
+            lbl.setStyleSheet("color: #888; font-size: 12px;")
+            
+            btn_close = QPushButton("✕")
+            btn_close.setFixedSize(16, 16)
+            btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_close.setStyleSheet("""
+                QPushButton { 
+                    color: #555; background: transparent; border: none; font-weight: bold; font-size: 10px;
+                }
+                QPushButton:hover { color: #f44336; }
+            """)
+            btn_close.clicked.connect(lambda: self._remove_breadcrumb_filter(filter_type, val))
+            
+            layout.addWidget(lbl)
+            layout.addWidget(btn_close)
+            self.breadcrumbs_layout.addWidget(container)
+
+        # 1. Text Filter
+        if text:
+            add_text_crumb(f"\"{text}\"", 'text')
+
+        # 2. Image Filter
+        if img_path:
+            add_text_crumb("🖼️", 'image')
+
+        # 3. Tags
+        if tags:
+            for tag in tags:
+                add_text_crumb(tag, 'tag', tag)
+
+        # Trigger the actual search
+        self._perform_visual_search(text, img_path, threshold or (self.search_panel.slider_sens.value()/100.0), 
+                                  sources or self.search_panel.get_selected_sources(), tags)
+
+    def _remove_breadcrumb_filter(self, filter_type, value=None):
+        """Удаляет фильтр через хлебные крошки."""
+        if filter_type == 'text':
+            self.search_panel.hybrid_input.text_input.clear()
+        elif filter_type == 'image':
+            self.search_panel.hybrid_input.clear_image()
+        elif filter_type == 'tag':
+            tags = self.search_panel.selected_tags
+            if value in tags:
+                tags.remove(value)
+                self.search_panel.set_selected_tags(tags)
+        
+        self._update_breadcrumbs() # Re-emit search
 
     def _perform_visual_search(self, text: str, img_path: str, threshold: float, sources: list, tags: list = None):
         if not text and not img_path and not tags:

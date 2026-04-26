@@ -7,6 +7,9 @@ import os
 
 
 from ui.widgets.flow_layout import FlowLayout
+from ui.widgets.tag_chip import TagChip
+import config
+from database.db_manager import DatabaseManager
 
 class TagBubble(QFrame):
     removed = pyqtSignal(str)
@@ -181,10 +184,11 @@ class SearchPanel(QWidget):
         self.sources_tree.setHeaderHidden(True)
         self.sources_tree.setIndentation(15)
         self.sources_tree.setColumnCount(1)
-        self.sources_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.sources_tree.customContextMenuRequested.connect(self._on_context_menu)
         self.sources_tree.itemChanged.connect(self._on_item_changed)
         main_layout.addWidget(self.sources_tree, 1)
+        
+        self.db = DatabaseManager(config.DB_PATH)
 
         # Static Items
         self.item_archdaily = None
