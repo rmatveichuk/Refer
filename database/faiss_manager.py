@@ -60,24 +60,19 @@ class FaissManager:
 
     def search(self, query_vector: np.ndarray, k: int = 10, valid_ids: list[int] = None) -> tuple[np.ndarray, np.ndarray]:
         """Searches for k nearest neighbors, optionally filtering by valid SQLite asset IDs."""
-        import numpy as np  # Explicitly import np here just to be 100% safe against UnboundLocalError
-        
         if query_vector is None:
             query_vector = np.array([])
             
         try:
             query_vector = np.asarray(query_vector, dtype=np.float32)
         except Exception as e:
-            import logging
-            logging.error(f"Error converting query_vector to float32: {e}, type: {type(query_vector)}")
+            logger.error(f"Error converting query_vector to float32: {e}, type: {type(query_vector)}")
             query_vector = np.array([], dtype=np.float32)
         
         # Prevent FAISS crash if vector contains NaNs
         if np.isnan(query_vector).any():
             query_vector = np.nan_to_num(query_vector)
             
-        if len(query_vector.shape) == 1:
-            query_vector = np.expand_dims(query_vector, axis=0)
         if len(query_vector.shape) == 1:
             query_vector = np.expand_dims(query_vector, axis=0)
             
@@ -91,7 +86,6 @@ class FaissManager:
                 k_ret = min(k, len(valid_ids))
                 return np.zeros(k_ret, dtype=np.float32), np.array(valid_ids[:k_ret], dtype=np.int64)
 
-            import numpy as np
             valid_ids_arr = np.array(valid_ids, dtype=np.int64)
             valid_ids_arr.sort()
             
@@ -100,8 +94,7 @@ class FaissManager:
             try:
                 distances, indices = self.index.search(query_vector, k, params=params)
             except Exception as e:
-                import logging
-                logging.error(f"FAISS search error with valid_ids: {e}")
+                logger.error(f"FAISS search error with valid_ids: {e}")
                 return np.array([]), np.array([])
         else:
             if query_vector.shape[1] == 0:
@@ -110,8 +103,7 @@ class FaissManager:
             try:
                 distances, indices = self.index.search(query_vector, k)
             except Exception as e:
-                import logging
-                logging.error(f"FAISS search error: {e}")
+                logger.error(f"FAISS search error: {e}")
                 return np.array([]), np.array([])
             
         return distances[0], indices[0]

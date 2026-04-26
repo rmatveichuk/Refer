@@ -3,7 +3,6 @@ import sqlite3
 import faiss
 import numpy as np
 from pathlib import Path
-import tempfile
 import sys
 import os
 

@@ -227,7 +227,7 @@ def clear_clip_embeddings() -> int:
     
     # 2. Пересоздаем пустой FAISS индекс
     try:
-        quantizer = faiss.IndexFlatL2(config.FAISS_PATH.parent.name)
+        quantizer = faiss.IndexFlatL2(config.VECTOR_DIMENSION)
         new_index = faiss.IndexIDMap(quantizer)
         faiss.write_index(new_index, str(config.FAISS_PATH))
         logger.info("FAISS index recreated (empty)")

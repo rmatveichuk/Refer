@@ -31,3 +31,8 @@ Desktop.ini
 *.txt
 !requirements.txt
 !README.md
+
+# Одноразовые скрипты и бэкапы
+scripts/
+scratch/
+backups/

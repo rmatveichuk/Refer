@@ -1,5 +1,5 @@
 PyQt6
-sentence-transformers
+transformers
 argostranslate
 curl_cffi==0.15.0
 Pillow>=11.2.1
