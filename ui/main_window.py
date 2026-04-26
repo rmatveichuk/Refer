@@ -65,31 +65,38 @@ class MainWindow(QMainWindow):
         self.ai_initializing = True
         self.status_label.setText("⏳ Инициализация AI (в фоне)...")
         
+        class InitSignals(QObject):
+            finished = pyqtSignal(object)  # AiEngine or None
+            error = pyqtSignal(str)
+
         class InitWorker(QRunnable):
-            def __init__(self, parent):
+            def __init__(self):
                 super().__init__()
-                self.parent = parent
+                self.signals = InitSignals()
             def run(self):
                 try:
                     from ai.engine import AiEngine
                     engine = AiEngine()
-                    # Проверяем, не удален ли родительский объект перед обновлением UI
-                    from PyQt6 import sip
-                    if not sip.isdeleted(self.parent):
-                        self.parent.ai = engine
-                        self.parent.status_label.setText("✅ AI готов")
+                    self.signals.finished.emit(engine)
                 except Exception as e:
                     logger.error(f"Background AI init failed: {e}")
-                    from PyQt6 import sip
-                    if not sip.isdeleted(self.parent):
-                        self.parent.status_label.setText("❌ Ошибка AI")
-                finally:
-                    from PyQt6 import sip
-                    if not sip.isdeleted(self.parent):
-                        self.parent.ai_initializing = False
+                    self.signals.error.emit(str(e))
 
-        worker = InitWorker(self)
+        worker = InitWorker()
+        worker.signals.finished.connect(self._on_ai_ready)
+        worker.signals.error.connect(self._on_ai_error)
         QThreadPool.globalInstance().start(worker)
+
+    @pyqtSlot(object)
+    def _on_ai_ready(self, engine):
+        self.ai = engine
+        self.ai_initializing = False
+        self.status_label.setText("✅ AI готов")
+
+    @pyqtSlot(str)
+    def _on_ai_error(self, error_msg):
+        self.ai_initializing = False
+        self.status_label.setText("❌ Ошибка AI")
 
     def _init_ui(self):
         # Структура:
@@ -260,15 +267,16 @@ class MainWindow(QMainWindow):
             if asset.image_type != "Local":
                 if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
                     try: os.remove(asset.thumbnail_path)
-                    except: pass
-            
-            # 3. Удаляем из БД
-            with self.db.get_connection() as conn:
-                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
-                conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
-                conn.commit()
+                    except Exception: pass
             
             deleted_count += 1
+
+        # 3. Удаляем из БД пакетно (одно соединение)
+        with self.db.get_connection() as conn:
+            for aid in asset_ids:
+                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (aid,))
+                conn.execute("DELETE FROM assets WHERE id = ?", (aid,))
+            conn.commit()
 
         # 4. Удаляем из FAISS
         if asset_ids:
@@ -283,10 +291,10 @@ class MainWindow(QMainWindow):
         deleted_count, deleted_ids = self.db.cleanup_missing_files()
         
         # Глубокая очистка FAISS (на случай, если что-то осталось от прошлых удалений)
+        orphan_ids = []
         try:
             faiss_ids = self.faiss_mgr.get_all_ids()
             db_ids = self.db.get_all_asset_ids()
-            # Находим ID, которые есть в FAISS, но нет в базе
             orphan_ids = [int(fid) for fid in faiss_ids if int(fid) not in db_ids]
             
             if orphan_ids:
@@ -295,12 +303,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Deep FAISS cleanup failed: {e}")
 
-        if deleted_count > 0 or (locals().get('orphan_ids') and len(orphan_ids) > 0):
-            # Синхронизируем с FAISS (хотя это уже сделано выше в глубокой очистке, оставим для надежности)
+        if deleted_count > 0 or orphan_ids:
             if deleted_ids:
                 self.faiss_mgr.remove_ids(deleted_ids)
             
-            total_removed = deleted_count + (len(orphan_ids) if locals().get('orphan_ids') else 0)
+            total_removed = deleted_count + len(orphan_ids)
             self.status_label.setText(f"🧹 Очищено {total_removed} неактуальных записей")
             self._load_assets_for_gallery()
             self._refresh_library()
@@ -424,12 +431,14 @@ class MainWindow(QMainWindow):
                 if asset.image_type != "Local":
                     if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
                         try: os.remove(asset.thumbnail_path)
-                        except: pass
-                with self.db.get_connection() as conn:
-                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
-                    conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
-                    conn.commit()
+                        except Exception: pass
                 deleted_count += 1
+            
+            with self.db.get_connection() as conn:
+                for aid in asset_ids:
+                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (aid,))
+                    conn.execute("DELETE FROM assets WHERE id = ?", (aid,))
+                conn.commit()
             
             if asset_ids:
                 self.faiss_mgr.remove_ids(asset_ids)

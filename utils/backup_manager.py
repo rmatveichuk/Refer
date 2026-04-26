@@ -270,7 +270,7 @@ def get_current_embedding_type() -> str:
                     # Предполагаем CLIP если нет явных маркеров Gemini
                     # В будущем можно добавить метаданные
                     return "clip"
-            except:
+            except Exception:
                 pass
         
         return "unknown"

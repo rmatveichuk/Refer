@@ -297,7 +297,7 @@ class GalleryView(QListView):
                 if asset.image_type != "Local":
                     if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
                         try: os.remove(asset.thumbnail_path)
-                        except: pass
+                        except Exception: pass
                 
                 with self.db.get_connection() as conn:
                     conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))

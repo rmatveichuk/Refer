@@ -188,7 +188,7 @@ class BehanceParser:
                             conn.close()
                             continue
                         conn.close()
-                    except:
+                    except Exception:
                         pass
 
                 asset_data = {
