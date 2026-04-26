@@ -23,6 +23,7 @@ from database.faiss_manager import FaissManager
 from ui.settings_dialog import SettingsDialog
 from PyQt6.QtWidgets import QFileDialog
 import config
+from ui.translations import tr
 
 import sqlite3
 import logging
@@ -46,7 +47,6 @@ class MainWindow(QMainWindow):
         self.active_indexer = None
         self.active_searcher = None
         self.ai_initializing = False  # Флаг для предотвращения двойной инициализации
-        self.current_category = "All"
         self.search_threshold = 0.6
         self.search_sources = []
         
@@ -120,11 +120,13 @@ class MainWindow(QMainWindow):
         self.top_toolbar.add_folder_requested.connect(self._add_folder)
         self.top_toolbar.index_requested.connect(self.start_indexing)
         self.top_toolbar.cleanup_requested.connect(self._cleanup_missing_files)
-        self.top_toolbar.category_changed.connect(self._on_category_changed)
+        self.top_toolbar.language_changed.connect(self.retranslate_ui)
+        self.top_toolbar.settings_requested.connect(self._open_settings)
         main_layout.addWidget(self.top_toolbar)
 
         # Выведем статус-бар и прогресс-бар в общий доступ MainWindow, для совместимости
         self.status_label = self.top_toolbar.status_label
+        self._settings_dialog = None
         
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedHeight(4)
@@ -174,12 +176,13 @@ class MainWindow(QMainWindow):
 
         self._setup_gallery_tab()
         self._setup_library_tab()
+        self.retranslate_ui()
     def _on_tab_changed(self, index):
         tab_text = self.tabs.tabText(index)
-        if tab_text == "Выделить все":
+        if tab_text in (tr("select_all"), "Выделить все", "Select All"):
             self.tabs.setCurrentIndex(self._previous_tab_index)
             self._select_all_gallery()
-        elif tab_text == "Удалить":
+        elif tab_text in (tr("delete"), "Удалить", "Delete"):
             self.tabs.setCurrentIndex(self._previous_tab_index)
             self._delete_selected_gallery()
         else:
@@ -211,7 +214,7 @@ class MainWindow(QMainWindow):
         self.gallery.parent_window = self
         
         gallery_layout.addWidget(self.gallery)
-        self.tabs.addTab(gallery_tab, "Галерея")
+        self.tabs.addTab(gallery_tab, tr("gallery"))
 
     def _setup_library_tab(self):
         library_tab = QWidget()
@@ -235,11 +238,11 @@ class MainWindow(QMainWindow):
         self.library_table.customContextMenuRequested.connect(self._show_library_context_menu)
 
         library_layout.addWidget(self.library_table)
-        self.tabs.addTab(library_tab, "Таблица")
+        self.tabs.addTab(library_tab, tr("table"))
         
         # Fake tabs for actions
-        self.tabs.addTab(QWidget(), "Выделить все")
-        self.tabs.addTab(QWidget(), "Удалить")
+        self.tabs.addTab(QWidget(), tr("select_all"))
+        self.tabs.addTab(QWidget(), tr("delete"))
 
     def _delete_assets_batch(self, assets: list):
         """Централизованное удаление списка ассетов (БД + FAISS + файлы)."""
@@ -314,9 +317,6 @@ class MainWindow(QMainWindow):
         else:
             self.status_label.setText("✅ Отсутствующие файлы не найдены")
 
-    def _on_category_changed(self, category: str):
-        self.current_category = category
-        self._load_assets_for_gallery()
 
     def update_sources_panel(self):
         # 1. Получаем "точки входа" из таблицы sources
@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
     def _add_folder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
         if folder_path:
-            parse_mode = self.top_toolbar.type_combo.currentText()
+            parse_mode = "3D Models" if self.top_toolbar.check_no_textures.isChecked() else "All"
             skip_deleted = self.top_toolbar.check_ignore_deleted.isChecked()
             recursive = self.top_toolbar.check_subfolders.isChecked()
 
@@ -525,12 +525,7 @@ class MainWindow(QMainWindow):
                 self.gallery_model.setAssets([])
                 return
 
-            # Categories filtering based on current_category
-            if self.current_category == "3D Models":
-                conditions.append("a.category = '3d_render'")
-            elif self.current_category == "Textures":
-                conditions.append("a.category = 'textures'")
-            # Add custom if needed
+            # (Category filtering removed)
             
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
@@ -600,10 +595,10 @@ class MainWindow(QMainWindow):
 
     def _show_library_context_menu(self, pos):
         menu = QMenu(self)
-        open_action = QAction("🌐 Открыть URL в Браузере", self)
+        open_action = QAction(tr("open_url"), self)
         open_action.triggered.connect(lambda: self._on_library_doubleclick(self.library_table.currentIndex()))
 
-        delete_action = QAction("🗑 Удалить", self)
+        delete_action = QAction(tr("delete"), self)
         delete_action.triggered.connect(self._delete_selected_asset)
 
         menu.addAction(open_action)
@@ -629,6 +624,24 @@ class MainWindow(QMainWindow):
                     image_type=row['image_type'] or 'Photography'
                 )
                 self._delete_assets_batch([asset])
+
+    def retranslate_ui(self):
+        self.tabs.setTabText(0, tr("gallery"))
+        self.tabs.setTabText(1, tr("table"))
+        self.tabs.setTabText(2, tr("select_all"))
+        self.tabs.setTabText(3, tr("delete"))
+        
+        self.status_label.setText(tr("ready"))
+        self.search_panel.retranslate_ui()
+        self.top_toolbar.retranslate_ui()
+        
+        if self._settings_dialog:
+            self._settings_dialog.retranslate_ui()
+
+    def _open_settings(self):
+        self._settings_dialog = SettingsDialog(self)
+        self._settings_dialog.language_changed.connect(self.retranslate_ui)
+        self._settings_dialog.show()
 
     def closeEvent(self, event):
         if self.active_scraper:

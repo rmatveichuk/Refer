@@ -3,6 +3,9 @@ import sys
 import ctypes
 from pathlib import Path
 
+# --- Localization ---
+CURRENT_LANGUAGE = "ru" # "ru" or "en"
+
 # --- Platform Specific Data Directories ---
 def get_app_data_dir() -> Path:
     """Returns the correct application data directory depending on the OS."""

@@ -4,6 +4,8 @@ from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPixmap, QGuiApplication, QKeySequence, QImage
 from PyQt6.QtCore import QEvent
 import tempfile
+import config
+from ui.translations import tr
 
 class DropZoneFrame(QFrame):
     def __init__(self, parent=None):
@@ -41,7 +43,7 @@ class HybridSearchInput(QWidget):
         self.drop_layout = QVBoxLayout(self.drop_zone)
         self.drop_layout.setContentsMargins(4, 4, 4, 4)
 
-        self.lbl_placeholder = QLabel("📥 Перетащите картинку\n(Drag & Drop)")
+        self.lbl_placeholder = QLabel(tr("drop_zone"))
         self.lbl_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_placeholder.setStyleSheet("color: #888; font-size: 13px; border: none; background: transparent;")
 
@@ -77,7 +79,7 @@ class HybridSearchInput(QWidget):
         
 
 
-        self.btn_analyze = QPushButton("✨ Авто-теги")
+        self.btn_analyze = QPushButton(tr("auto_tags"))
         self.btn_analyze.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_analyze.setStyleSheet("""
             QPushButton {
@@ -110,7 +112,7 @@ class HybridSearchInput(QWidget):
         # Text Input
         self.text_input = QLineEdit()
         self.text_input.setFixedHeight(36)
-        self.text_input.setPlaceholderText("Или введите поисковый запрос...")
+        self.text_input.setPlaceholderText(tr("search_placeholder"))
         self.text_input.setStyleSheet("""
             QLineEdit {
                 background-color: #1e1e1e; color: #e0e0e0;
@@ -168,14 +170,14 @@ class HybridSearchInput(QWidget):
             self.lbl_placeholder.setVisible(False)
             self.img_container.setVisible(True)
             self.btn_analyze.setVisible(True)
-            self.text_input.setPlaceholderText("Уточняющий запрос к картинке...")
+            self.text_input.setPlaceholderText(tr("refine_placeholder"))
 
     def clear_image(self):
         self.image_path = ""
         self.lbl_preview.clear()
         self.img_container.setVisible(False)
         self.lbl_placeholder.setVisible(True)
-        self.text_input.setPlaceholderText("Или введите поисковый запрос...")
+        self.text_input.setPlaceholderText(tr("search_placeholder"))
 
     def clear_all(self):
         self.clear_image()
@@ -215,3 +217,11 @@ class HybridSearchInput(QWidget):
                 self.set_image(urls[0].toLocalFile())
                 return True
         return False
+
+    def retranslate_ui(self):
+        self.lbl_placeholder.setText(tr("drop_zone"))
+        self.btn_analyze.setText(tr("auto_tags"))
+        if self.image_path:
+            self.text_input.setPlaceholderText(tr("refine_placeholder"))
+        else:
+            self.text_input.setPlaceholderText(tr("search_placeholder"))

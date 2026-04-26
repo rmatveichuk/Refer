@@ -8,6 +8,7 @@ import os
 
 from ui.widgets.flow_layout import FlowLayout
 from ui.widgets.tag_chip import TagChip
+from ui.translations import tr
 import config
 from database.db_manager import DatabaseManager
 
@@ -93,13 +94,12 @@ class SearchPanel(QWidget):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(10)
 
-        # Block 1: Search and Clear Actions
         actions_layout = QHBoxLayout()
-        self.btn_search = QPushButton("Поиск")
+        self.btn_search = QPushButton(tr("search"))
         self.btn_search.setStyleSheet("background-color: #29b6f6; color: black; font-weight: bold; border-radius: 6px; padding: 8px;")
         self.btn_search.clicked.connect(self._emit_search)
 
-        self.btn_clear = QPushButton("Очистить")
+        self.btn_clear = QPushButton(tr("clear"))
         self.btn_clear.setStyleSheet("background-color: #2d2d2d; color: white; border: 1px solid #444; border-radius: 6px; padding: 8px;")
         self.btn_clear.clicked.connect(self._clear_all)
 
@@ -116,7 +116,7 @@ class SearchPanel(QWidget):
 
         # Block 2.5: Tags
         tags_header_layout = QHBoxLayout()
-        self.btn_manage_tags = QPushButton("🏷️ Теги (0)")
+        self.btn_manage_tags = QPushButton(f"{tr('tags')} (0)")
         self.btn_manage_tags.setStyleSheet("background-color: #2d2d2d; color: #29b6f6; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 11px;")
         self.btn_manage_tags.clicked.connect(self.manage_tags_requested.emit)
         tags_header_layout.addWidget(self.btn_manage_tags)
@@ -136,14 +136,14 @@ class SearchPanel(QWidget):
 
         # Block 3: Sensitivity
         sens_header_layout = QHBoxLayout()
-        lbl_sens = QLabel("Чувствительность")
+        self.lbl_sens = QLabel(tr("sensitivity"))
         self.lbl_sens_value = QLabel("60%")
         self.lbl_sens_value.setStyleSheet("""
             font-weight: bold; font-size: 12px; color: #29b6f6;
             background-color: #1e2a30; border: 1px solid #29b6f6;
             border-radius: 4px; padding: 1px 6px;
         """)
-        sens_header_layout.addWidget(lbl_sens)
+        sens_header_layout.addWidget(self.lbl_sens)
         sens_header_layout.addStretch()
         sens_header_layout.addWidget(self.lbl_sens_value)
         main_layout.addLayout(sens_header_layout)
@@ -159,13 +159,13 @@ class SearchPanel(QWidget):
         self.slider_sens.sliderReleased.connect(self._on_slider_released)
         
         sens_labels_layout = QHBoxLayout()
-        lbl_wide = QLabel("Широкий")
-        lbl_wide.setStyleSheet("font-size: 10px; color: #888;")
-        lbl_exact = QLabel("Точный")
-        lbl_exact.setStyleSheet("font-size: 10px; color: #888;")
-        sens_labels_layout.addWidget(lbl_wide)
+        self.lbl_wide = QLabel(tr("wide"))
+        self.lbl_wide.setStyleSheet("font-size: 10px; color: #888;")
+        self.lbl_exact = QLabel(tr("exact"))
+        self.lbl_exact.setStyleSheet("font-size: 10px; color: #888;")
+        sens_labels_layout.addWidget(self.lbl_wide)
         sens_labels_layout.addStretch()
-        sens_labels_layout.addWidget(lbl_exact)
+        sens_labels_layout.addWidget(self.lbl_exact)
         
         main_layout.addWidget(self.slider_sens)
         main_layout.addLayout(sens_labels_layout)
@@ -177,8 +177,8 @@ class SearchPanel(QWidget):
         main_layout.addWidget(line2)
 
         # Block 4: Sources Tree
-        lbl_sources = QLabel("Источники")
-        main_layout.addWidget(lbl_sources)
+        self.lbl_sources = QLabel(tr("sources"))
+        main_layout.addWidget(self.lbl_sources)
 
         self.sources_tree = QTreeWidget()
         self.sources_tree.setHeaderHidden(True)
@@ -291,10 +291,10 @@ class SearchPanel(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet("QMenu { background-color: #2d2d2d; color: white; border: 1px solid #444; } QMenu::item:selected { background-color: #29b6f6; color: black; }")
         
-        solo_action = menu.addAction("Выбрать только это")
-        all_action = menu.addAction("Выбрать всё")
+        solo_action = menu.addAction(tr("solo_selection"))
+        all_action = menu.addAction(tr("select_everything"))
         menu.addSeparator()
-        remove_action = menu.addAction("🗑 Удалить из списка")
+        remove_action = menu.addAction(tr("remove_from_list"))
         
         action = menu.exec(self.sources_tree.viewport().mapToGlobal(pos))
         
@@ -357,7 +357,7 @@ class SearchPanel(QWidget):
 
     def set_selected_tags(self, tags: list):
         self.selected_tags = tags
-        self.btn_manage_tags.setText(f"🏷️ Теги ({len(tags)})")
+        self.btn_manage_tags.setText(f"{tr('tags')} ({len(tags)})")
         
         # Clear layout
         while self.tags_flow_layout.count():
@@ -416,3 +416,13 @@ class SearchPanel(QWidget):
         self.sources_tree.blockSignals(False)
         
         self.clear_triggered.emit()
+
+    def retranslate_ui(self):
+        self.btn_search.setText(tr("search"))
+        self.btn_clear.setText(tr("clear"))
+        self.btn_manage_tags.setText(f"{tr('tags')} ({len(self.selected_tags)})")
+        self.lbl_sens.setText(tr("sensitivity"))
+        self.lbl_wide.setText(tr("wide"))
+        self.lbl_exact.setText(tr("exact"))
+        self.lbl_sources.setText(tr("sources"))
+        self.hybrid_input.retranslate_ui()

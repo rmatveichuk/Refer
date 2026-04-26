@@ -1,5 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt
+import config
+from ui.translations import tr
 
 class TopToolbar(QWidget):
     # Signals
@@ -8,9 +10,10 @@ class TopToolbar(QWidget):
     add_folder_requested = pyqtSignal()
     index_requested = pyqtSignal()
     cleanup_requested = pyqtSignal()
-    category_changed = pyqtSignal(str)
     ignore_deleted_toggled = pyqtSignal(bool)
     subfolders_toggled = pyqtSignal(bool) # True = Recursive
+    language_changed = pyqtSignal(str)
+    settings_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,6 +38,25 @@ class TopToolbar(QWidget):
         layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(10)
 
+        layout.setSpacing(10)
+        
+        # Settings (Hamburger)
+        self.btn_settings = QPushButton("☰")
+        self.btn_settings.setFixedWidth(40)
+        self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_settings.setStyleSheet("""
+            QPushButton { 
+                background-color: transparent; 
+                border: none; 
+                font-size: 20px; 
+                color: #888; 
+                padding: 0;
+            }
+            QPushButton:hover { color: #29b6f6; }
+        """)
+        self.btn_settings.clicked.connect(self.settings_requested.emit)
+        layout.addWidget(self.btn_settings)
+
         # --- Left Block: Parsers ---
         self.parser_combo = QComboBox()
         self.parser_combo.addItems(["Behance", "ArchDaily"])
@@ -44,7 +66,7 @@ class TopToolbar(QWidget):
         self.url_input.setPlaceholderText("Enter URL...")
         self.url_input.setFixedWidth(200)
 
-        self.btn_scrape = QPushButton("▶ Start")
+        self.btn_scrape = QPushButton(tr("start"))
         self.btn_scrape.setStyleSheet("background-color: #29b6f6; color: black; border: none;")
         self.btn_scrape.clicked.connect(self._on_scrape_clicked)
 
@@ -54,7 +76,7 @@ class TopToolbar(QWidget):
 
         # --- Center Block: Monitoring ---
         layout.addStretch(1)
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel(tr("ready"))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("color: #888; font-size: 13px; font-style: italic;")
         self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -64,34 +86,34 @@ class TopToolbar(QWidget):
         # --- Right Block: Typing, Adding, Sync ---
         from PyQt6.QtWidgets import QCheckBox
         
-        self.check_ignore_deleted = QCheckBox("Игнорировать удаленные")
+        self.check_ignore_deleted = QCheckBox(tr("ignore_deleted"))
         self.check_ignore_deleted.setChecked(True)
         self.check_ignore_deleted.setToolTip("Не добавлять повторно файлы, которые были ранее удалены из галереи")
         self.check_ignore_deleted.toggled.connect(self.ignore_deleted_toggled.emit)
         
-        self.check_subfolders = QCheckBox("Подпапки")
+        self.check_subfolders = QCheckBox(tr("subfolders"))
         self.check_subfolders.setChecked(True)
         self.check_subfolders.setToolTip("Искать изображения во всех вложенных папках")
         self.check_subfolders.toggled.connect(self.subfolders_toggled.emit)
 
-        self.type_combo = QComboBox()
-        self.type_combo.addItems(["All", "Textures", "3D Models"])
-        self.type_combo.currentIndexChanged.connect(lambda: self.category_changed.emit(self.type_combo.currentText()))
+        self.check_no_textures = QCheckBox(tr("no_textures"))
+        self.check_no_textures.setChecked(True)
+        self.check_no_textures.setToolTip("Игнорировать папки 'textures', 'maps' и технические файлы (normal, bump и др.)")
 
-        self.btn_add_folder = QPushButton("+ Add Folder")
+        self.btn_add_folder = QPushButton(tr("add_folder"))
         self.btn_add_folder.clicked.connect(self.add_folder_requested.emit)
 
-        self.btn_index = QPushButton("🔍 Index")
+        self.btn_index = QPushButton(tr("index"))
         self.btn_index.setStyleSheet("background-color: #7b1fa2; color: white; border: none;")
         self.btn_index.clicked.connect(self.index_requested.emit)
         
-        self.btn_cleanup = QPushButton("🧹 Cleanup")
+        self.btn_cleanup = QPushButton(tr("cleanup"))
         self.btn_cleanup.setStyleSheet("background-color: #546e7a; color: white; border: none;")
         self.btn_cleanup.clicked.connect(self.cleanup_requested.emit)
-
+        
         layout.addWidget(self.check_ignore_deleted)
         layout.addWidget(self.check_subfolders)
-        layout.addWidget(self.type_combo)
+        layout.addWidget(self.check_no_textures)
         layout.addWidget(self.btn_add_folder)
         layout.addWidget(self.btn_index)
         layout.addWidget(self.btn_cleanup)
@@ -115,12 +137,31 @@ class TopToolbar(QWidget):
 
     def _set_btn_state(self, is_scraping: bool):
         if is_scraping:
-            self.btn_scrape.setText("⏹ Stop")
+            self.btn_scrape.setText(tr("stop"))
             self.btn_scrape.setStyleSheet("background-color: #f44336; color: white; border: none;")
             self.url_input.setEnabled(False)
             self.parser_combo.setEnabled(False)
         else:
-            self.btn_scrape.setText("▶ Start")
+            self.btn_scrape.setText(tr("start"))
             self.btn_scrape.setStyleSheet("background-color: #29b6f6; color: black; border: none;")
             self.url_input.setEnabled(True)
             self.parser_combo.setEnabled(True)
+
+    def _toggle_language(self):
+        # This is now handled in SettingsDialog, but we keep the logic if needed
+        pass
+
+    def retranslate_ui(self):
+        self.url_input.setPlaceholderText(tr("url_placeholder"))
+        if self.is_scraping:
+            self.btn_scrape.setText(tr("stop"))
+        else:
+            self.btn_scrape.setText(tr("start"))
+        
+        self.status_label.setText(tr("ready"))
+        self.check_ignore_deleted.setText(tr("ignore_deleted"))
+        self.check_subfolders.setText(tr("subfolders"))
+        self.check_no_textures.setText(tr("no_textures"))
+        self.btn_add_folder.setText(tr("add_folder"))
+        self.btn_index.setText(tr("index"))
+        self.btn_cleanup.setText(tr("cleanup"))

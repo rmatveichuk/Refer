@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from .flow_layout import FlowLayout
 from .tag_chip import TagChip
+from ui.translations import tr
 
 
 class TagManagerDialog(QDialog):
@@ -13,7 +14,7 @@ class TagManagerDialog(QDialog):
         self.selected_tags = set(selected_tags or [])
         self.available_tags = {}
         
-        self.setWindowTitle("Smart Tag Manager")
+        self.setWindowTitle(tr("tag_manager"))
         self.setFixedSize(600, 750) # Increased height as requested
         self.setStyleSheet("""
             QDialog { background-color: #121212; color: #e0e0e0; }
@@ -44,13 +45,14 @@ class TagManagerDialog(QDialog):
 
         # Search input
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Введите тег (например: Бетон, Экстерьер)...")
+        self.search_input.setPlaceholderText(tr("tag_input_placeholder"))
         self.search_input.textChanged.connect(self._filter_tags)
         self.search_input.returnPressed.connect(self._add_custom_tag)
         layout.addWidget(self.search_input)
 
         # Available tags area (Suggestions)
-        layout.addWidget(QLabel("Предлагаемые теги:"))
+        self.lbl_suggested = QLabel(tr("suggested_tags"))
+        layout.addWidget(self.lbl_suggested)
         
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -63,34 +65,33 @@ class TagManagerDialog(QDialog):
         
         layout.addWidget(self.scroll_area)
 
-        # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        btn_cancel = QPushButton("Отмена")
-        btn_cancel.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        btn_cancel.setStyleSheet("""
+        self.btn_cancel = QPushButton(tr("cancel"))
+        self.btn_cancel.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.btn_cancel.setStyleSheet("""
             QPushButton {
                 background-color: transparent; color: #888;
                 border: 1px solid #444; border-radius: 6px; padding: 8px 16px; font-weight: bold;
             }
             QPushButton:hover { background-color: #2d2d2d; color: white; }
         """)
-        btn_cancel.clicked.connect(self.reject)
+        self.btn_cancel.clicked.connect(self.reject)
         
-        btn_apply = QPushButton("Применить")
-        btn_apply.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        btn_apply.setStyleSheet("""
+        self.btn_apply = QPushButton(tr("apply"))
+        self.btn_apply.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.btn_apply.setStyleSheet("""
             QPushButton {
                 background-color: #29b6f6; color: black;
                 border: none; border-radius: 6px; padding: 8px 24px; font-weight: bold;
             }
             QPushButton:hover { background-color: #4fc3f7; }
         """)
-        btn_apply.clicked.connect(self.accept)
+        self.btn_apply.clicked.connect(self.accept)
         
-        btn_layout.addWidget(btn_cancel)
-        btn_layout.addWidget(btn_apply)
+        btn_layout.addWidget(self.btn_cancel)
+        btn_layout.addWidget(self.btn_apply)
         layout.addLayout(btn_layout)
 
     def _load_tags(self):
@@ -159,3 +160,10 @@ class TagManagerDialog(QDialog):
 
     def get_selected_tags(self):
         return list(self.selected_tags)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr("tag_manager"))
+        self.search_input.setPlaceholderText(tr("tag_input_placeholder"))
+        self.lbl_suggested.setText(tr("suggested_tags"))
+        self.btn_cancel.setText(tr("cancel"))
+        self.btn_apply.setText(tr("apply"))
