@@ -25,7 +25,9 @@ class AssetListModel(QAbstractListModel):
         self.loading.clear()
         self.endResetModel()
 
-    def rowCount(self, parent=QModelIndex()) -> int:
+    def rowCount(self, parent=None) -> int:
+        if parent is not None and parent.isValid():
+            return 0
         return len(self.assets)
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
