@@ -989,6 +989,7 @@ class MainWindow(QMainWindow):
         self.search_threshold = threshold
         self.search_sources = sources
         self.search_tags = tags or []
+        self.current_search_text = text  # Сохраняем текст для поиска по описаниям
 
         class SearchWorker(QRunnable):
             class Signals(QObject):
@@ -1127,20 +1128,56 @@ class MainWindow(QMainWindow):
 
         # 2. FAISS Vector Search with pre-filtering
         results = []
+        
+        # --- TEXT SEARCH IN DESCRIPTIONS ---
+        text_match_ids = set()
+        if hasattr(self, 'current_search_text') and self.current_search_text:
+            query = self.current_search_text.lower().strip()
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                # Ищем по вхождению подстроки в описание
+                cur.execute("SELECT id FROM assets WHERE LOWER(description) LIKE ?", (f"%{query}%",))
+                # Ограничиваем только теми ID, которые прошли фильтрацию по источникам/тегам
+                valid_set = set(valid_ids)
+                for row in cur.fetchall():
+                    if row['id'] in valid_set:
+                        text_match_ids.add(row['id'])
+        
         if vector is not None and len(vector) > 0:
             k = min(500, len(valid_ids))
             distances, ids = self.faiss_mgr.search(vector, k=k, valid_ids=valid_ids)
 
             import math
             max_distance = 2.0 * math.exp(-5.3 * self.search_threshold)
-            results = [(dist, int(aid)) for dist, aid in zip(distances, ids) if aid > 0 and dist <= max_distance]
+            
+            # Собираем результаты вектора
+            for dist, aid in zip(distances, ids):
+                if aid > 0 and dist <= max_distance:
+                    # Если есть и текстовое совпадение, повышаем приоритет (уменьшаем дистанцию)
+                    final_dist = dist * 0.5 if aid in text_match_ids else dist
+                    results.append((final_dist, int(aid)))
+            
+            # Добавляем текстовые совпадения, которых нет в векторном результате
+            vector_ids = set(aid for _, aid in results)
+            for aid in text_match_ids:
+                if aid not in vector_ids:
+                    # Присваиваем "хорошую" дистанцию текстовому совпадению
+                    results.append((0.1, int(aid)))
+            
+            # Сортируем по итоговой дистанции
+            results.sort()
         else:
-            # Если нет вектора (только теги), берем все валидные ID с дистанцией 0
-            # Ограничиваем до 500 чтобы не перегружать интерфейс
-            results = [(0.0, int(aid)) for aid in valid_ids[:500]]
+            # Если нет вектора (только теги или текст), берем текстовые совпадения первыми
+            for aid in text_match_ids:
+                results.append((0.0, int(aid)))
+            
+            # Добавляем остальные валидные ID
+            for aid in valid_ids[:500]:
+                if aid not in text_match_ids:
+                    results.append((1.0, int(aid)))
         
         if not results:
-            self.status_label.setText("Не найдено визуально похожих изображений (уменьшите строгость поиска).")
+            self.status_label.setText("Ничего не найдено (попробуйте изменить запрос или уменьшить строгость).")
             self.gallery_model.setAssets([])
             return
 
