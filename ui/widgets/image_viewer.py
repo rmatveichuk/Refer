@@ -108,9 +108,13 @@ class ImageViewerWindow(QMainWindow):
         # Тулбар
         toolbar = QToolBar()
         toolbar.setStyleSheet("""
-            QToolBar { background-color: #1a1a1a; border-bottom: 1px solid #333; padding: 4px; }
-            QPushButton { background-color: #2d2d2d; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 6px 12px; font-size: 13px; }
-            QPushButton:hover { background-color: #3d3d3d; }
+            QToolBar { background-color: #1a1a1a; border-bottom: 1px solid #222; padding: 4px; spacing: 8px; }
+            QPushButton { 
+                background-color: #252525; color: #888; border: 1px solid #333; border-radius: 4px; padding: 6px 14px; font-size: 13px; 
+            }
+            QPushButton:hover { background-color: #333; color: #ccc; border-color: #444; }
+            QPushButton:pressed { background-color: #111; }
+            QPushButton:checked { background-color: #dcdcdc; color: #000; border: none; }
         """)
         self.addToolBar(toolbar)
 
@@ -164,6 +168,7 @@ class ImageViewerWindow(QMainWindow):
 
         self.btn_toggle_desc = QPushButton("📝 Текст")
         self.btn_toggle_desc.setCheckable(True)
+        self.btn_toggle_desc.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_desc.toggled.connect(self.dock.setVisible)
         self.dock.visibilityChanged.connect(self.btn_toggle_desc.setChecked)
         self.btn_toggle_desc_action = toolbar.addWidget(self.btn_toggle_desc)
@@ -318,8 +323,8 @@ class ImageViewerWindow(QMainWindow):
             desc = self.db.get_description(asset.id)
             
             if asset.is_favorite:
-                self.btn_fav.setText("⭐ В избранном")
-                self.btn_fav.setStyleSheet("color: #ffeb3b;")
+                self.btn_fav.setText("★ В избранном")
+                self.btn_fav.setStyleSheet("background-color: #dcdcdc; color: #000; border: none;")
             else:
                 self.btn_fav.setText("☆ В избранное")
                 self.btn_fav.setStyleSheet("")

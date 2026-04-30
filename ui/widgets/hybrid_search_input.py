@@ -18,7 +18,7 @@ class DropZoneFrame(QFrame):
                 border-radius: 8px;
             }
             QFrame:hover {
-                border-color: #29b6f6;
+                border-color: #fff;
             }
         """)
 
@@ -115,11 +115,11 @@ class HybridSearchInput(QWidget):
         self.text_input.setPlaceholderText(tr("search_placeholder"))
         self.text_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1e1e1e; color: #e0e0e0;
-                border: 1px solid #444; border-radius: 6px;
-                padding: 5px 10px; font-size: 13px;
+                background-color: #1a1a1a; color: #fff;
+                border: 1px solid #333; border-radius: 4px;
+                padding: 5px 12px; font-size: 13px;
             }
-            QLineEdit:focus { border-color: #29b6f6; }
+            QLineEdit:focus { border-color: #fff; }
         """)
         self.text_input.returnPressed.connect(self._on_enter)
         self.layout.addWidget(self.text_input)
@@ -134,12 +134,12 @@ class HybridSearchInput(QWidget):
             urls = event.mimeData().urls()
             if urls and urls[0].toLocalFile().lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
                 event.acceptProposedAction()
-                self.drop_zone.setStyleSheet("QFrame { background-color: #2a2a2a; border: 2px dashed #29b6f6; border-radius: 8px; }")
+                self.drop_zone.setStyleSheet("QFrame { background-color: #222; border: 2px dashed #fff; border-radius: 8px; }")
 
     def _dragLeaveEvent(self, event):
         self.drop_zone.setStyleSheet("""
-            QFrame { background-color: #1e1e1e; border: 2px dashed #444; border-radius: 8px; }
-            QFrame:hover { border-color: #29b6f6; }
+            QFrame { background-color: #1a1a1a; border: 2px dashed #333; border-radius: 8px; }
+            QFrame:hover { border-color: #fff; }
         """)
 
     def _dropEvent(self, event):

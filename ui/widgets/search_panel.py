@@ -20,15 +20,15 @@ class TagBubble(QFrame):
         self.tag_name = tag_name
         self.setStyleSheet("""
             QFrame {
-                background-color: #1e2a30; border: 1px solid #29b6f6;
-                border-radius: 10px; padding: 2px 6px;
+                background-color: #252525; border: 1px solid #444;
+                border-radius: 4px; padding: 2px 6px;
             }
-            QLabel { color: #29b6f6; font-size: 11px; font-weight: bold; border: none; margin: 0; padding: 0; }
+            QLabel { color: #eee; font-size: 11px; font-weight: normal; border: none; margin: 0; padding: 0; }
             QPushButton {
-                background-color: transparent; color: #888; border: none; font-size: 10px; font-weight: bold;
+                background-color: transparent; color: #666; border: none; font-size: 10px; font-weight: bold;
                 margin: 0; padding: 0 4px;
             }
-            QPushButton:hover { color: #f44336; }
+            QPushButton:hover { color: #fff; }
         """)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 2, 4, 2)
@@ -62,31 +62,32 @@ class SearchPanel(QWidget):
     def _init_ui(self):
         self.setFixedWidth(300)
         self.setStyleSheet("""
-            QWidget { background-color: #121212; color: #e0e0e0; }
-            QLabel { font-weight: bold; margin-top: 10px; margin-bottom: 5px; }
+            QWidget { background-color: #0f0f0f; color: #e0e0e0; }
+            QLabel { font-weight: bold; margin-top: 10px; margin-bottom: 5px; color: #888; font-size: 11px; text-transform: uppercase; }
             
             QTreeWidget { 
-                background-color: #121212; 
+                background-color: #0f0f0f; 
                 border: none; 
                 outline: none;
                 margin-top: 5px;
             }
             QTreeWidget::item { 
                 padding: 4px; 
+                color: #bbb;
             }
-            QTreeWidget::item:hover { background-color: #1a1a1a; }
-            QTreeWidget::item:selected { background-color: #1e2a30; color: #29b6f6; }
+            QTreeWidget::item:hover { background-color: #1a1a1a; color: #fff; }
+            QTreeWidget::item:selected { background-color: #222; color: #fff; font-weight: bold; }
             
             QTreeWidget::indicator {
-                width: 16px;
-                height: 16px;
-                border: 1px solid #555;
+                width: 14px;
+                height: 14px;
+                border: 1px solid #444;
                 border-radius: 3px;
-                background-color: #1e1e1e;
+                background-color: #1a1a1a;
             }
             QTreeWidget::indicator:checked {
-                background-color: #29b6f6;
-                border-color: #29b6f6;
+                background-color: #ffffff;
+                border-color: #ffffff;
             }
         """)
 
@@ -96,7 +97,10 @@ class SearchPanel(QWidget):
 
         actions_layout = QHBoxLayout()
         self.btn_search = QPushButton(tr("search"))
-        self.btn_search.setStyleSheet("background-color: #29b6f6; color: black; font-weight: bold; border-radius: 6px; padding: 8px;")
+        self.btn_search.setStyleSheet("""
+            QPushButton { background-color: #444; color: #fff; font-weight: bold; border-radius: 4px; padding: 10px; border: 1px solid #555; }
+            QPushButton:hover { background-color: #555; border-color: #666; }
+        """)
         self.btn_search.clicked.connect(self._emit_search)
 
         self.btn_clear = QPushButton(tr("clear"))
@@ -117,7 +121,7 @@ class SearchPanel(QWidget):
         # Block 2.5: Tags
         tags_header_layout = QHBoxLayout()
         self.btn_manage_tags = QPushButton(f"{tr('tags')} (0)")
-        self.btn_manage_tags.setStyleSheet("background-color: #2d2d2d; color: #29b6f6; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 11px;")
+        self.btn_manage_tags.setStyleSheet("background-color: #1a1a1a; color: #fff; border: 1px solid #333; border-radius: 4px; padding: 4px 8px; font-size: 11px;")
         self.btn_manage_tags.clicked.connect(self.manage_tags_requested.emit)
         tags_header_layout.addWidget(self.btn_manage_tags)
         tags_header_layout.addWidget(self.hybrid_input.btn_analyze)
@@ -139,9 +143,9 @@ class SearchPanel(QWidget):
         self.lbl_sens = QLabel(tr("sensitivity"))
         self.lbl_sens_value = QLabel("60%")
         self.lbl_sens_value.setStyleSheet("""
-            font-weight: bold; font-size: 12px; color: #29b6f6;
-            background-color: #1e2a30; border: 1px solid #29b6f6;
-            border-radius: 4px; padding: 1px 6px;
+            font-weight: bold; font-size: 11px; color: #fff;
+            background-color: #222; border: 1px solid #444;
+            border-radius: 3px; padding: 1px 6px;
         """)
         sens_header_layout.addWidget(self.lbl_sens)
         sens_header_layout.addStretch()
@@ -152,8 +156,8 @@ class SearchPanel(QWidget):
         self.slider_sens.setRange(0, 100)
         self.slider_sens.setValue(60)
         self.slider_sens.setStyleSheet("""
-            QSlider::groove:horizontal { border: 1px solid #444; height: 4px; background: #1e1e1e; border-radius: 2px; }
-            QSlider::handle:horizontal { background: #29b6f6; width: 14px; margin: -5px 0; border-radius: 7px; }
+            QSlider::groove:horizontal { border: 1px solid #333; height: 3px; background: #222; border-radius: 1px; }
+            QSlider::handle:horizontal { background: #fff; width: 12px; height: 12px; margin: -5px 0; border-radius: 6px; }
         """)
         self.slider_sens.valueChanged.connect(self._on_slider_value_changed)
         self.slider_sens.sliderReleased.connect(self._on_slider_released)

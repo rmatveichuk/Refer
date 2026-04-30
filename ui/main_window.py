@@ -157,9 +157,10 @@ class MainWindow(QMainWindow):
         # --- Right: Gallery & Library Tabs ---
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; border-left: 1px solid #333; }
-            QTabBar::tab { background: #1a1a1a; color: #888; padding: 8px 16px; border: none; }
-            QTabBar::tab:selected { background: #29b6f6; color: #000; font-weight: bold; }
+            QTabWidget::pane { border: none; border-left: 1px solid #222; }
+            QTabBar::tab { background: #1a1a1a; color: #777; padding: 10px 20px; border: none; border-bottom: 2px solid transparent; }
+            QTabBar::tab:hover { color: #aaa; background: #222; }
+            QTabBar::tab:selected { background: #222; color: #fff; border-bottom: 2px solid #fff; font-weight: bold; }
         """)
         
         # --- We will add the buttons as "fake tabs" instead ---

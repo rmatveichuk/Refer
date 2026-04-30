@@ -23,15 +23,17 @@ class TopToolbar(QWidget):
     def _init_ui(self):
         self.setFixedHeight(50)
         self.setStyleSheet("""
-            QWidget { background-color: #1a1a1a; color: #e0e0e0; }
-            QPushButton { background-color: #2d2d2d; border: 1px solid #444; border-radius: 6px; padding: 5px 12px; font-weight: bold; }
-            QPushButton:hover { background-color: #3d3d3d; border-color: #555; }
-            QComboBox, QLineEdit { background-color: #2d2d2d; border: 1px solid #444; border-radius: 6px; padding: 5px 10px; }
-            QComboBox:focus, QLineEdit:focus { border-color: #29b6f6; }
-            QCheckBox { spacing: 8px; font-size: 12px; color: #aaa; }
-            QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #444; border-radius: 4px; background-color: #2d2d2d; }
-            QCheckBox::indicator:checked { background-color: #29b6f6; border-color: #29b6f6; }
-            QCheckBox:hover { color: #fff; }
+            QWidget { background-color: #1a1a1a; color: #ccc; }
+            QPushButton { 
+                background-color: #2d2d2d; border: 1px solid #333; border-radius: 4px; padding: 6px 12px; font-weight: bold; color: #aaa; 
+            }
+            QPushButton:hover { background-color: #383838; border-color: #444; color: #eee; }
+            QComboBox, QLineEdit { background-color: #252525; border: 1px solid #333; border-radius: 4px; padding: 5px 10px; color: #fff; }
+            QComboBox:focus, QLineEdit:focus { border-color: #555; }
+            QCheckBox { spacing: 8px; font-size: 11px; color: #777; }
+            QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #333; border-radius: 2px; background-color: #252525; }
+            QCheckBox::indicator:checked { background-color: #ffffff; border-color: #ffffff; }
+            QCheckBox:hover { color: #eee; }
         """)
 
         layout = QHBoxLayout(self)
@@ -52,7 +54,7 @@ class TopToolbar(QWidget):
                 color: #888; 
                 padding: 0;
             }
-            QPushButton:hover { color: #29b6f6; }
+            QPushButton:hover { color: #fff; }
         """)
         self.btn_settings.clicked.connect(self.settings_requested.emit)
         layout.addWidget(self.btn_settings)
@@ -67,7 +69,11 @@ class TopToolbar(QWidget):
         self.url_input.setFixedWidth(200)
 
         self.btn_scrape = QPushButton(tr("start"))
-        self.btn_scrape.setStyleSheet("background-color: #29b6f6; color: black; border: none;")
+        self.btn_scrape.setStyleSheet("""
+            QPushButton { background-color: #444; color: #fff; border: 1px solid #555; padding: 6px 15px; }
+            QPushButton:hover { background-color: #555; border-color: #666; }
+            QPushButton:pressed { background-color: #333; }
+        """)
         self.btn_scrape.clicked.connect(self._on_scrape_clicked)
 
         layout.addWidget(self.parser_combo)
@@ -104,11 +110,9 @@ class TopToolbar(QWidget):
         self.btn_add_folder.clicked.connect(self.add_folder_requested.emit)
 
         self.btn_index = QPushButton(tr("index"))
-        self.btn_index.setStyleSheet("background-color: #7b1fa2; color: white; border: none;")
         self.btn_index.clicked.connect(self.index_requested.emit)
         
         self.btn_cleanup = QPushButton(tr("cleanup"))
-        self.btn_cleanup.setStyleSheet("background-color: #546e7a; color: white; border: none;")
         self.btn_cleanup.clicked.connect(self.cleanup_requested.emit)
         
         layout.addWidget(self.check_ignore_deleted)
@@ -138,12 +142,12 @@ class TopToolbar(QWidget):
     def _set_btn_state(self, is_scraping: bool):
         if is_scraping:
             self.btn_scrape.setText(tr("stop"))
-            self.btn_scrape.setStyleSheet("background-color: #f44336; color: white; border: none;")
+            self.btn_scrape.setStyleSheet("background-color: #442222; color: #ff8888; border: 1px solid #663333;")
             self.url_input.setEnabled(False)
             self.parser_combo.setEnabled(False)
         else:
             self.btn_scrape.setText(tr("start"))
-            self.btn_scrape.setStyleSheet("background-color: #29b6f6; color: black; border: none;")
+            self.btn_scrape.setStyleSheet("background-color: #444; color: #fff; border: 1px solid #555;")
             self.url_input.setEnabled(True)
             self.parser_combo.setEnabled(True)
 
