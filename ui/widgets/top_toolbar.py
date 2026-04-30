@@ -70,9 +70,9 @@ class TopToolbar(QWidget):
 
         self.btn_scrape = QPushButton(tr("start"))
         self.btn_scrape.setStyleSheet("""
-            QPushButton { background-color: #444; color: #fff; border: 1px solid #555; padding: 6px 15px; }
-            QPushButton:hover { background-color: #555; border-color: #666; }
-            QPushButton:pressed { background-color: #333; }
+            QPushButton { background-color: #2d2d2d; color: white; border: 1px solid #444; border-radius: 4px; padding: 6px 15px; }
+            QPushButton:hover { background-color: #3d3d3d; border-color: #555; }
+            QPushButton:pressed { background-color: #222; }
         """)
         self.btn_scrape.clicked.connect(self._on_scrape_clicked)
 
@@ -92,19 +92,43 @@ class TopToolbar(QWidget):
         # --- Right Block: Typing, Adding, Sync ---
         from PyQt6.QtWidgets import QCheckBox
         
+        # Help Icon
+        self.btn_help = QLabel("ⓘ")
+        self.btn_help.setFixedSize(18, 18)
+        self.btn_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.btn_help.setToolTip(tr("help_modes"))
+        self.btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_help.setStyleSheet("""
+            QLabel {
+                color: #666;
+                background-color: #252525;
+                border: 1px solid #333;
+                border-radius: 9px;
+                font-size: 11px;
+                font-weight: bold;
+                margin-right: 2px;
+            }
+            QLabel:hover {
+                color: #fff;
+                background-color: #333;
+                border-color: #555;
+            }
+        """)
+        layout.addWidget(self.btn_help)
+
         self.check_ignore_deleted = QCheckBox(tr("ignore_deleted"))
         self.check_ignore_deleted.setChecked(True)
-        self.check_ignore_deleted.setToolTip("Не добавлять повторно файлы, которые были ранее удалены из галереи")
+        self.check_ignore_deleted.setToolTip(tr("ignore_deleted"))
         self.check_ignore_deleted.toggled.connect(self.ignore_deleted_toggled.emit)
         
         self.check_subfolders = QCheckBox(tr("subfolders"))
         self.check_subfolders.setChecked(True)
-        self.check_subfolders.setToolTip("Искать изображения во всех вложенных папках")
+        self.check_subfolders.setToolTip(tr("subfolders"))
         self.check_subfolders.toggled.connect(self.subfolders_toggled.emit)
 
         self.check_no_textures = QCheckBox(tr("no_textures"))
         self.check_no_textures.setChecked(True)
-        self.check_no_textures.setToolTip("Игнорировать папки 'textures', 'maps' и технические файлы (normal, bump и др.)")
+        self.check_no_textures.setToolTip(tr("no_textures"))
 
         self.btn_add_folder = QPushButton(tr("add_folder"))
         self.btn_add_folder.clicked.connect(self.add_folder_requested.emit)
@@ -147,7 +171,7 @@ class TopToolbar(QWidget):
             self.parser_combo.setEnabled(False)
         else:
             self.btn_scrape.setText(tr("start"))
-            self.btn_scrape.setStyleSheet("background-color: #444; color: #fff; border: 1px solid #555;")
+            self.btn_scrape.setStyleSheet("background-color: #2d2d2d; color: white; border: 1px solid #444; border-radius: 4px;")
             self.url_input.setEnabled(True)
             self.parser_combo.setEnabled(True)
 
@@ -169,3 +193,9 @@ class TopToolbar(QWidget):
         self.btn_add_folder.setText(tr("add_folder"))
         self.btn_index.setText(tr("index"))
         self.btn_cleanup.setText(tr("cleanup"))
+        
+        # Tooltips
+        self.btn_help.setToolTip(tr("help_modes"))
+        self.check_ignore_deleted.setToolTip(tr("ignore_deleted"))
+        self.check_subfolders.setToolTip(tr("subfolders"))
+        self.check_no_textures.setToolTip(tr("no_textures"))

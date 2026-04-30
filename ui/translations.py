@@ -50,7 +50,21 @@ STRINGS = {
         "open_url": "🌐 Открыть URL в Браузере",
         "solo_selection": "Выбрать только это",
         "select_everything": "Выбрать всё",
-        "remove_from_list": "🗑 Удалить из списка"
+        "remove_from_list": "🗑 Удалить из списка",
+        "location": "Расположение",
+        "export_library": "Экспорт библиотеки (.refpack)",
+        "import_library": "Импорт библиотеки (.refpack)",
+        "backup_db": "Бэкап базы",
+        "change_path": "Изменить путь",
+        "relink_images": "Перепривязать картинки",
+        "select_image_folder": "Выберите папку с изображениями",
+        "export_success": "Библиотека успешно экспортирована!",
+        "import_success": "Библиотека успешно импортирована!",
+        "import_warning": "Внимание! Это действие заменит вашу текущую библиотеку. Продолжить?",
+        "merge_library": "Добавить (Слияние)",
+        "replace_library": "Заменить (Чистая установка)",
+        "import_mode": "Режим импорта",
+        "help_modes": "<b>Режимы сканирования:</b><br><br>• <b>Игнорировать удаленные:</b> файлы не будут добавлены снова после удаления из библиотеки.<br>• <b>Подпапки:</b> глубокий поиск во всех вложенных директориях.<br>• <b>Без текстур:</b> автоматический пропуск папок 'textures', 'maps' и технических карт (bump, normal и т.д.)."
     },
     "en": {
         "start": "▶ Start",
@@ -101,7 +115,21 @@ STRINGS = {
         "open_url": "🌐 Open URL in Browser",
         "solo_selection": "Solo selection",
         "select_everything": "Select everything",
-        "remove_from_list": "🗑 Remove from list"
+        "remove_from_list": "🗑 Remove from list",
+        "location": "Location",
+        "export_library": "Export Library (.refpack)",
+        "import_library": "Import Library (.refpack)",
+        "backup_db": "Backup DB",
+        "change_path": "Change Path",
+        "relink_images": "Relink Images",
+        "select_image_folder": "Select images folder",
+        "export_success": "Library exported successfully!",
+        "import_success": "Library imported successfully!",
+        "import_warning": "Warning! This will replace your current library. Continue?",
+        "merge_library": "Add (Merge)",
+        "replace_library": "Replace (Clean Install)",
+        "import_mode": "Import Mode",
+        "help_modes": "<b>Scanning Modes:</b><br><br>• <b>Ignore Deleted:</b> files will not be re-added after they were deleted from the library.<br>• <b>Subfolders:</b> recursive search in all nested directories.<br>• <b>No Textures:</b> automatic skip of 'textures', 'maps' folders and technical maps (bump, normal, etc.)."
     }
 }
 

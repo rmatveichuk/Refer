@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QToolBar, QStatusBar, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+    QToolBar, QStatusBar, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
+    QMessageBox
 )
-from PyQt6.QtCore import Qt, QRectF, QSize
+from PyQt6.QtCore import Qt, QRectF, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QImage, QWheelEvent, QMouseEvent, QKeyEvent, QKeySequence, QFont
 from PyQt6.QtWidgets import QDockWidget, QTextEdit
 
@@ -65,6 +66,28 @@ class ZoomableImageView(QGraphicsView):
             self.zoom_out()
 
 
+class FloatingDeleteButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__("🗑︎", parent) # Added U+FE0E for text presentation
+        self.setFixedSize(44, 44)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(20, 20, 20, 120);
+                color: #555;
+                border: 1px solid #222;
+                border-radius: 22px;
+                font-size: 20px;
+                padding-bottom: 2px;
+            }
+            QPushButton:hover {
+                background-color: rgba(244, 67, 54, 230);
+                color: white;
+                border: none;
+            }
+        """)
+
+
 class ImageViewerWindow(QMainWindow):
     """Окно просмотра изображения в полном размере."""
 
@@ -88,6 +111,11 @@ class ImageViewerWindow(QMainWindow):
         self.viewer = ZoomableImageView(self)
         layout.addWidget(self.viewer)
         self.setCentralWidget(central)
+
+        # Floating Delete Button
+        self.btn_floating_delete = FloatingDeleteButton(central)
+        self.btn_floating_delete.clicked.connect(self._delete_current_asset)
+        self.btn_floating_delete.raise_()
 
         # Описание от ИИ в Dock-панели (снизу)
         self.dock = QDockWidget("ИИ Описание" if config.CURRENT_LANGUAGE == "ru" else "AI Description", self)
@@ -185,6 +213,15 @@ class ImageViewerWindow(QMainWindow):
         self._thread_pool = QThreadPool.globalInstance()
 
         self._key_pressed = False
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Position floating delete button in top right
+        margin = 20
+        self.btn_floating_delete.move(
+            self.centralWidget().width() - self.btn_floating_delete.width() - margin,
+            margin
+        )
 
     def set_assets(self, assets: list, start_index: int):
         """Открыть viewer, assets — список Asset, start_index — какой открыть."""
@@ -362,6 +399,21 @@ class ImageViewerWindow(QMainWindow):
             self.btn_toggle_desc.setChecked(True)
             self.dock.setVisible(True)
             self.status.showMessage("⏳ Отправлено на ИИ-анализ...", 3000)
+
+    def _delete_current_asset(self):
+        if self.current_index < 0 or not self.parent_window: return
+        asset = self.assets[self.current_index]
+        
+        if hasattr(self.parent_window, "_delete_assets_batch"):
+            if self.parent_window._delete_assets_batch([asset]):
+                # Remove from local list and move to next or previous
+                self.assets.pop(self.current_index)
+                if not self.assets:
+                    self.close()
+                else:
+                    if self.current_index >= len(self.assets):
+                        self.current_index = len(self.assets) - 1
+                    self._load_full_image()
 
     def update_description(self, asset_id: int, description: str):
         """Called externally when AI analysis finishes."""

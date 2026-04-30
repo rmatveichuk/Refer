@@ -288,14 +288,14 @@ class MainWindow(QMainWindow):
     def _delete_assets_batch(self, assets: list):
         """Централизованное удаление списка ассетов (БД + FAISS + файлы)."""
         if not assets:
-            return
+            return False
 
         count = len(assets)
         msg = f"Вы действительно хотите удалить {count} ассетов?\n\nОни будут скрыты из галереи и не добавятся при повторном сканировании."
         reply = QMessageBox.question(self, "Удаление", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply != QMessageBox.StandardButton.Yes:
-            return
+            return False
 
         deleted_count = 0
         asset_ids = []
@@ -329,6 +329,7 @@ class MainWindow(QMainWindow):
         self._load_assets_for_gallery()
         self._refresh_library()
         self.status_label.setText(f"🧹 Удалено {deleted_count} ассетов")
+        return True
 
     def _cleanup_missing_files(self):
         """Очистка базы от записей, файлы которых были удалены пользователем вручную."""
@@ -667,6 +668,7 @@ class MainWindow(QMainWindow):
                 self._delete_assets_batch([asset])
 
     def retranslate_ui(self):
+        self.tabs.blockSignals(True)
         self.tabs.setTabText(0, tr("gallery"))
         self.tabs.setTabText(1, tr("table"))
         self.tabs.setTabText(2, tr("favorites"))
@@ -679,11 +681,113 @@ class MainWindow(QMainWindow):
         
         if self._settings_dialog:
             self._settings_dialog.retranslate_ui()
+            
+        self.tabs.blockSignals(False)
 
     def _open_settings(self):
         self._settings_dialog = SettingsDialog(self)
         self._settings_dialog.language_changed.connect(self.retranslate_ui)
+        self._settings_dialog.export_requested.connect(self._export_library)
+        self._settings_dialog.import_requested.connect(self._import_library)
+        self._settings_dialog.backup_requested.connect(self._backup_db)
+        self._settings_dialog.relink_requested.connect(self._relink_images)
         self._settings_dialog.show()
+
+    def _export_library(self):
+        path, _ = QFileDialog.getSaveFileName(self, tr("export_library"), "", "Refer Package (*.refpack)")
+        if path:
+            if not path.endswith(".refpack"): path += ".refpack"
+            from utils.library_manager import export_library
+            try:
+                success = export_library(config.DB_PATH, config.FAISS_PATH, path)
+                if success:
+                    QMessageBox.information(self, "Refer", tr("export_success"))
+            except Exception as e:
+                logger.error(f"Export failed: {e}")
+                QMessageBox.critical(self, "Error", f"Export failed: {e}")
+
+    def _import_library(self):
+        path, _ = QFileDialog.getOpenFileName(self, tr("import_library"), "", "Refer Package (*.refpack)")
+        if not path: return
+        
+        # Choice dialog: Merge or Replace
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(tr("import_mode"))
+        msg_box.setText(tr("import_warning"))
+        btn_replace = msg_box.addButton(tr("replace_library"), QMessageBox.ButtonRole.DestructiveRole)
+        btn_merge = msg_box.addButton(tr("merge_library"), QMessageBox.ButtonRole.AcceptRole)
+        btn_cancel = msg_box.addButton(tr("cancel"), QMessageBox.ButtonRole.RejectRole)
+        msg_box.exec()
+        
+        clicked_btn = msg_box.clickedButton()
+        if clicked_btn == btn_cancel: return
+        
+        mode = "replace" if clicked_btn == btn_replace else "merge"
+        
+        # Ask for images folder
+        img_root = QFileDialog.getExistingDirectory(self, tr("select_image_folder"))
+        if not img_root: return
+        
+        from utils.library_manager import import_library_replace, relink_paths, merge_libraries
+        import shutil
+        
+        temp_dir = config.APP_DATA_DIR / "temp_import"
+        try:
+            db_ext, index_ext = import_library_replace(path, temp_dir)
+            
+            # Relink paths in the imported DB
+            relink_paths(db_ext, img_root)
+            
+            if mode == "replace":
+                # Full replace
+                # 1. Backup current
+                shutil.copy2(config.DB_PATH, str(config.DB_PATH) + ".bak")
+                shutil.copy2(config.FAISS_PATH, str(config.FAISS_PATH) + ".bak")
+                
+                # 2. Overwrite
+                shutil.copy2(db_ext, config.DB_PATH)
+                shutil.copy2(index_ext, config.FAISS_PATH)
+                
+                QMessageBox.information(self, "Refer", tr("import_success"))
+                
+                # 3. Reload FAISS and DB state
+                self.faiss_mgr = FaissManager(config.FAISS_PATH, dimension=config.VECTOR_DIMENSION)
+                self._load_assets_for_gallery()
+                self._refresh_library()
+                self.update_sources_panel()
+            else:
+                # Merge
+                merged, skipped = merge_libraries(self.db, db_ext, index_ext, self.faiss_mgr)
+                QMessageBox.information(self, "Refer", f"Merged: {merged}, Skipped: {skipped}")
+                self._load_assets_for_gallery()
+                self._refresh_library()
+                self.update_sources_panel()
+        except Exception as e:
+            logger.error(f"Import failed: {e}")
+            QMessageBox.critical(self, "Error", f"Import failed: {e}")
+        finally:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _backup_db(self):
+        from utils.library_manager import backup_database
+        try:
+            path = backup_database(config.DB_PATH)
+            if path:
+                QMessageBox.information(self, "Refer", f"Backup saved: {os.path.basename(path)}")
+        except Exception as e:
+            logger.error(f"Backup failed: {e}")
+            QMessageBox.critical(self, "Error", f"Backup failed: {e}")
+
+    def _relink_images(self, new_root):
+        from utils.library_manager import relink_paths
+        try:
+            count = relink_paths(config.DB_PATH, new_root)
+            QMessageBox.information(self, "Refer", f"Updated {count} paths.")
+            self._load_assets_for_gallery()
+        except Exception as e:
+            logger.error(f"Relinking failed: {e}")
+            QMessageBox.critical(self, "Error", f"Relinking failed: {e}")
 
     def closeEvent(self, event):
         if self.active_scraper:
