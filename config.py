@@ -3,35 +3,51 @@ import sys
 import ctypes
 from pathlib import Path
 
-# --- Localization ---
-CURRENT_LANGUAGE = "ru" # "ru" or "en"
-
 # --- Platform Specific Data Directories ---
-def get_app_data_dir() -> Path:
-    """Returns the correct application data directory depending on the OS."""
-    app_name = "ReferAssetManager"
-    
+
+def get_resource_path(relative_path: str) -> str:
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+def get_app_roaming_dir() -> Path:
+    r"""Returns the %AppData%\Refer\ directory for DB and settings."""
+    app_name = "Refer"
     if sys.platform == "win32":
-        # %LOCALAPPDATA%\ReferAssetManager
-        local_app_data = os.getenv('LOCALAPPDATA')
-        if not local_app_data:
-            # Fallback
-            local_app_data = os.path.join(os.path.expanduser('~'), 'AppData', 'Local')
-        base_dir = Path(local_app_data) / app_name
+        # %APPDATA%
+        app_data = os.environ.get('APPDATA')
+        if not app_data:
+            app_data = os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming')
+        base_dir = Path(app_data) / app_name
     elif sys.platform == "darwin":
-        # ~/Library/Application Support/ReferAssetManager
         base_dir = Path.home() / 'Library' / 'Application Support' / app_name
     else:
-        # ~/.local/share/ReferAssetManager (Linux)
+        base_dir = Path.home() / '.config' / app_name
+    return base_dir
+
+def get_app_local_dir() -> Path:
+    r"""Returns the %LocalAppData%\Refer\ directory for heavy models and cache."""
+    app_name = "Refer"
+    if sys.platform == "win32":
+        # %LOCALAPPDATA%
+        local_data = os.environ.get('LOCALAPPDATA')
+        if not local_data:
+            local_data = os.path.join(os.path.expanduser('~'), 'AppData', 'Local')
+        base_dir = Path(local_data) / app_name
+    elif sys.platform == "darwin":
+        base_dir = Path.home() / 'Library' / 'Caches' / app_name
+    else:
         base_dir = Path.home() / '.local' / 'share' / app_name
-        
-    base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir
 
 def get_short_path(path_str: str) -> str:
     """
     On Windows, C++ libraries (like FAISS) sometimes fail if the path contains Cyrillic/Unicode characters.
-    This function returns the short 8.3 path (e.g., C:\\Users\\ПРИВЕТ~1\\...) which is strictly ASCII.
+    This function returns the short 8.3 path.
     """
     if sys.platform != "win32":
         return path_str
@@ -49,17 +65,25 @@ def get_short_path(path_str: str) -> str:
 
 # Base Paths
 BASE_DIR = Path(__file__).parent.absolute()
-APP_DATA_DIR = get_app_data_dir()
+APP_ROAMING_DIR = get_app_roaming_dir()
+APP_LOCAL_DIR = get_app_local_dir()
 
-# User Data
-THUMBNAILS_DIR = APP_DATA_DIR / "thumbnails"
-THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
+# Database & FAISS (%AppData%\Refer\Database)
+DB_DIR = APP_ROAMING_DIR / "Database"
+DB_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DB_DIR / "collection.db"
 
-DB_PATH = APP_DATA_DIR / "refer.db"
-
-# FAISS index (using short path to guarantee C++ compatibility even if username is in Cyrillic)
-_faiss_raw_path = str(APP_DATA_DIR / "refer_faiss.index")
+# FAISS index (using short path to guarantee C++ compatibility)
+_faiss_raw_path = str(DB_DIR / "collection.index")
 FAISS_PATH = Path(get_short_path(_faiss_raw_path))
+
+# AI Models (%LocalAppData%\Refer\Models)
+MODELS_DIR = APP_LOCAL_DIR / "Models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Thumbnails (%LocalAppData%\Refer\Thumbnails)
+THUMBNAILS_DIR = APP_LOCAL_DIR / "Thumbnails"
+THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
 
 # AI Settings
 SIGLIP_MODEL = "google/siglip-so400m-patch14-384"
@@ -69,9 +93,10 @@ VECTOR_DIMENSION = 1152  # Updated for so400m model
 THUMBNAIL_SIZE = 1024 # px
 BATCH_LOAD_SIZE = 50  # For Lazy Loading limits
 
+# --- Localization ---
+CURRENT_LANGUAGE = "ru" # "ru" or "en"
 
-# Базовый словарь тегов для авто-тегирования (Zero-Shot Classification)
-# Вы можете редактировать этот список под свои нужды.
+# Базовый словарь тегов для авто-тегирования
 TAG_VOCABULARY = {
     "Material": [
         "concrete", "wood", "brick", "glass", "metal", 

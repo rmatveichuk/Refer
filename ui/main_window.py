@@ -333,26 +333,49 @@ class MainWindow(QMainWindow):
 
     def _cleanup_missing_files(self):
         """Очистка базы от записей, файлы которых были удалены пользователем вручную."""
-        deleted_count, deleted_ids = self.db.cleanup_missing_files()
+        self.status_label.setText("🧹 Запуск очистки...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
         
-        # Глубокая очистка FAISS (на случай, если что-то осталось от прошлых удалений)
-        orphan_ids = []
-        try:
-            faiss_ids = self.faiss_mgr.get_all_ids()
-            db_ids = self.db.get_all_asset_ids()
-            orphan_ids = [int(fid) for fid in faiss_ids if int(fid) not in db_ids]
-            
-            if orphan_ids:
-                self.faiss_mgr.remove_ids(orphan_ids)
-                logger.info(f"Deep Cleanup: removed {len(orphan_ids)} orphaned vectors from FAISS")
-        except Exception as e:
-            logger.error(f"Deep FAISS cleanup failed: {e}")
+        class CleanupWorker(QRunnable):
+            def __init__(self, db, faiss_mgr):
+                super().__init__()
+                self.db = db
+                self.faiss_mgr = faiss_mgr
+                self.signals = type('Signals', (QObject,), {
+                    'finished': pyqtSignal(int, int), # deleted_count, orphan_count
+                    'error': pyqtSignal(str)
+                })()
 
-        if deleted_count > 0 or orphan_ids:
-            if deleted_ids:
-                self.faiss_mgr.remove_ids(deleted_ids)
-            
-            total_removed = deleted_count + len(orphan_ids)
+            def run(self):
+                try:
+                    deleted_count, deleted_ids = self.db.cleanup_missing_files()
+                    
+                    # Глубокая очистка FAISS
+                    orphan_ids = []
+                    faiss_ids = self.faiss_mgr.get_all_ids()
+                    db_ids = self.db.get_all_asset_ids()
+                    orphan_ids = [int(fid) for fid in faiss_ids if int(fid) not in db_ids]
+                    
+                    if orphan_ids:
+                        self.faiss_mgr.remove_ids(orphan_ids)
+                        
+                    if deleted_ids:
+                        self.faiss_mgr.remove_ids(deleted_ids)
+                        
+                    self.signals.finished.emit(deleted_count, len(orphan_ids))
+                except Exception as e:
+                    self.signals.error.emit(str(e))
+
+        worker = CleanupWorker(self.db, self.faiss_mgr)
+        worker.signals.finished.connect(self._on_cleanup_finished)
+        worker.signals.error.connect(lambda err: self.status_label.setText(f"❌ Ошибка очистки: {err}"))
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_cleanup_finished(self, deleted_count, orphan_count):
+        self.progress_bar.setVisible(False)
+        total_removed = deleted_count + orphan_count
+        if total_removed > 0:
             self.status_label.setText(f"🧹 Очищено {total_removed} неактуальных записей")
             self._load_assets_for_gallery()
             self._refresh_library()
@@ -368,23 +391,36 @@ class MainWindow(QMainWindow):
             source_folders = [row['domain'] for row in (cur.fetchall() or [])]
 
             # 2. Получаем ВСЕ папки, в которых лежат проиндексированные файлы
-            cur.execute("SELECT DISTINCT local_path FROM assets WHERE local_path IS NOT NULL")
-            asset_paths = [row['local_path'] for row in cur.fetchall()]
+            cur.execute("SELECT DISTINCT local_path FROM assets WHERE local_path IS NOT NULL AND local_path != ''")
+            asset_paths = [row['local_path'] for row in cur.fetchall() if row['local_path']]
             
             import os
-            # Путь к папке thumbnails, которую нужно скрыть
+            import config
+            
+            # Пути к системным папкам, которые нужно скрыть из списка источников
+            hidden_prefixes = [
+                str(config.THUMBNAILS_DIR).lower(),
+                str(config.APP_LOCAL_DIR).lower(),
+                str(config.APP_ROAMING_DIR).lower()
+            ]
+            
+            # Поддержка старых путей (от предыдущих версий)
             app_data = os.getenv('LOCALAPPDATA')
-            thumbnails_path = os.path.join(app_data, 'ReferAssetManager', 'thumbnails').lower() if app_data else ""
+            if app_data:
+                hidden_prefixes.append(os.path.join(app_data, 'ReferAssetManager').lower())
             
             all_folders = set(source_folders)
             for p in asset_paths:
-                folder = os.path.dirname(p)
+                folder = os.path.normpath(os.path.dirname(p))
+                folder_lower = folder.lower()
+                
+                # Если папка лежит внутри системной директории (кэш миниатюр и т.д.) - игнорируем
+                if any(folder_lower.startswith(hp) for hp in hidden_prefixes):
+                    continue
+                    
                 # Добавляем саму папку и ВСЕ её родительские папки вверх по дереву
-                # пока не дойдем до одной из "точек входа" или корня диска
                 curr = folder
                 while curr and len(curr) > 3:
-                    if curr.lower() == thumbnails_path:
-                        break
                     all_folders.add(curr)
                     next_parent = os.path.dirname(curr)
                     if next_parent == curr: break # Дошли до корня
@@ -731,7 +767,7 @@ class MainWindow(QMainWindow):
         from utils.library_manager import import_library_replace, relink_paths, merge_libraries
         import shutil
         
-        temp_dir = config.APP_DATA_DIR / "temp_import"
+        temp_dir = config.APP_LOCAL_DIR / "temp_import"
         try:
             db_ext, index_ext = import_library_replace(path, temp_dir)
             

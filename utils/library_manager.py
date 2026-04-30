@@ -31,8 +31,8 @@ def export_library(db_path, index_path, output_path):
     }
     
     with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        zipf.write(db_path, arcname="refer.db")
-        zipf.write(index_path, arcname="refer_faiss.index")
+        zipf.write(db_path, arcname="collection.db")
+        zipf.write(index_path, arcname="collection.index")
         zipf.writestr("manifest.json", json.dumps(manifest, indent=4))
             
     return True
@@ -47,8 +47,8 @@ def import_library_replace(package_path, extract_dir):
     with zipfile.ZipFile(package_path, 'r') as zipf:
         zipf.extractall(extract_dir)
         
-    db_path = extract_dir / "refer.db"
-    index_path = extract_dir / "refer_faiss.index"
+    db_path = extract_dir / "collection.db"
+    index_path = extract_dir / "collection.index"
     
     if not db_path.exists() or not index_path.exists():
         # Cleanup

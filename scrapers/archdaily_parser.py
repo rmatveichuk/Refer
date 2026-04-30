@@ -30,8 +30,16 @@ class ArchDailyParser:
 
     def _run_browser_cmd(self, *args) -> str:
         cmd = ["browser-act", "--session", self.session_name] + list(args)
+        
+        # Блокируем появление окна консоли в Windows
+        import os
+        creationflags = 0
+        if os.name == 'nt':
+            import subprocess
+            creationflags = subprocess.CREATE_NO_WINDOW
+            
         # Using utf-8 explicitly since ArchDaily contains many unicode titles
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', creationflags=creationflags)
         if result.returncode != 0:
             logger.error(f"browser-act error (cmd={cmd[2:4]}): {result.stderr}")
         return result.stdout.strip()
@@ -57,7 +65,12 @@ class ArchDailyParser:
         finally:
             self._run_browser_cmd("browser", "close")
             if hasattr(self, 'browser_id') and self.browser_id:
-                subprocess.run(["browser-act", "browser", "delete", self.browser_id], capture_output=True)
+                import os
+                cflags = 0
+                if os.name == 'nt':
+                    import subprocess
+                    cflags = subprocess.CREATE_NO_WINDOW
+                subprocess.run(["browser-act", "browser", "delete", self.browser_id], capture_output=True, creationflags=cflags)
 
     def _scrape_search_results(self, start_url: str):
         # We start looking through pages

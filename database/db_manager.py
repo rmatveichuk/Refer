@@ -370,6 +370,7 @@ class DatabaseManager:
             cur.execute("SELECT id, local_path, thumbnail_path, image_type FROM assets")
             rows = cur.fetchall()
 
+            import os
             for row in rows:
                 asset_id = row['id']
                 local_path = row['local_path']
@@ -379,14 +380,15 @@ class DatabaseManager:
                 is_missing = False
                 # Для локальных файлов проверяем оригинал
                 if img_type == "Local" and local_path:
-                    if not Path(local_path).exists():
+                    # Используем os.path.exists, он работает значительно быстрее Path().exists() в циклах
+                    if not os.path.exists(local_path):
                         is_missing = True
                 # Для веб-файлов или если нет локального пути, проверяем превью в кэше
                 elif thumb_path:
-                    if not Path(thumb_path).exists():
+                    if not os.path.exists(thumb_path):
                         is_missing = True
                 elif local_path: # fallback
-                    if not Path(local_path).exists():
+                    if not os.path.exists(local_path):
                         is_missing = True
 
                 if is_missing:

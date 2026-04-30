@@ -36,3 +36,16 @@ Desktop.ini
 scripts/
 scratch/
 backups/
+
+# PyInstaller & Build artifacts
+build/
+dist/
+setup/
+*.spec
+
+# Inno Setup
+*.iss
+
+# Large source images
+_icon.png
+new_icon.png

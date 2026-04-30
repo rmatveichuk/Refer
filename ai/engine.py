@@ -30,13 +30,25 @@ class AiEngine:
         
         # Загружаем модель сразу в нужном типе данных. 
         # low_cpu_mem_usage=False предотвращает ошибку "Cannot copy out of meta tensor"
+        # Since we downloaded to a local_dir during SetupWizard without symlinks,
+        # we construct the exact path to that local_dir to load the model.
+        model_path = config.MODELS_DIR / config.SIGLIP_MODEL.replace("/", "--")
+        if not model_path.exists():
+            # Fallback to cache_dir if it was downloaded the old way
+            model_path = config.SIGLIP_MODEL
+            
         self.model = AutoModel.from_pretrained(
-            config.SIGLIP_MODEL, 
+            str(model_path), 
             torch_dtype=self.dtype, 
-            low_cpu_mem_usage=False
+            low_cpu_mem_usage=False,
+            cache_dir=str(config.MODELS_DIR) if model_path == config.SIGLIP_MODEL else None
         ).to(self.device).eval()
         
-        self.processor = AutoProcessor.from_pretrained(config.SIGLIP_MODEL, use_fast=True)
+        self.processor = AutoProcessor.from_pretrained(
+            str(model_path), 
+            use_fast=True,
+            cache_dir=str(config.MODELS_DIR) if model_path == config.SIGLIP_MODEL else None
+        )
         
         # Для параллельной загрузки картинок
         self.executor = ThreadPoolExecutor(max_workers=8)

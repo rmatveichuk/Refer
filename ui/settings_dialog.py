@@ -191,7 +191,7 @@ class SettingsDialog(QDialog):
     def _update_storage_info(self):
         self.storage_info.setText(
             f"<b>{tr('db')}:</b> {config.DB_PATH.name}<br>"
-            f"<b>{tr('thumbnails')}:</b> {config.APP_DATA_DIR / 'thumbnails'}"
+            f"<b>{tr('thumbnails')}:</b> {config.THUMBNAILS_DIR}"
         )
 
     def retranslate_ui(self):

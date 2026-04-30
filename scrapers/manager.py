@@ -139,8 +139,8 @@ class ScraperManager(QRunnable):
             if not filename:
                 filename = f"temp_{int(time.time())}.jpg"
                 
-            temp_path = config.APP_DATA_DIR / "temp" / filename
-            temp_path.parent.mkdir(exist_ok=True)
+            temp_path = config.APP_LOCAL_DIR / "temp" / filename
+            temp_path.parent.mkdir(exist_ok=True, parents=True)
             
             with open(temp_path, 'wb') as f:
                 f.write(response.content)
