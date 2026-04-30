@@ -16,6 +16,11 @@ def export_library(db_path, index_path, output_path):
     db_path = Path(db_path)
     index_path = Path(index_path)
     
+    # Create checkpoint to merge WAL into main DB to ensure all data is exported
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()
+
     # Create manifest
     manifest = {
         "version": "1.0",
@@ -25,18 +30,10 @@ def export_library(db_path, index_path, output_path):
         "index_name": index_path.name
     }
     
-    manifest_path = Path(output_path).parent / "manifest_temp.json"
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=4)
-        
-    try:
-        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(db_path, arcname="refer.db")
-            zipf.write(index_path, arcname="refer_faiss.index")
-            zipf.write(manifest_path, arcname="manifest.json")
-    finally:
-        if manifest_path.exists():
-            os.remove(manifest_path)
+    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(db_path, arcname="refer.db")
+        zipf.write(index_path, arcname="refer_faiss.index")
+        zipf.writestr("manifest.json", json.dumps(manifest, indent=4))
             
     return True
 
@@ -60,10 +57,11 @@ def import_library_replace(package_path, extract_dir):
         
     return db_path, index_path
 
-def relink_paths(db_path, new_root):
+def relink_paths(db_path, new_local_root=None, new_thumbnails_root=None):
     """
-    Mass updates all local_path and thumbnail_path entries in DB.
-    For each path, it keeps the filename but changes the directory to new_root.
+    Updates local_path and thumbnail_path entries in DB.
+    - new_thumbnails_root: If provided, all thumbnails are repointed here (flattened, as thumbnails are flat).
+    - new_local_root: If provided, attempts to replace the common prefix of all local_paths with this new root, preserving relative structure.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -72,18 +70,43 @@ def relink_paths(db_path, new_root):
     cursor.execute("SELECT id, local_path, thumbnail_path FROM assets")
     rows = cursor.fetchall()
     
+    # Find common prefix for local paths to replace it
+    local_paths = [r['local_path'] for r in rows if r['local_path']]
+    common_prefix = ""
+    if local_paths and new_local_root:
+        try:
+            # os.path.commonpath needs valid paths, we normalize them first
+            valid_paths = [Path(p.replace('\\', '/')) for p in local_paths]
+            common_prefix = str(Path(*os.path.commonprefix([p.parts for p in valid_paths])))
+        except Exception as e:
+            logger.warning(f"Could not determine common prefix: {e}")
+            common_prefix = ""
+            
     count = 0
-    new_root_path = Path(new_root)
+    if new_local_root:
+        new_local_root_path = Path(new_local_root)
+    if new_thumbnails_root:
+        new_thumb_root_path = Path(new_thumbnails_root)
     
     for row in rows:
         updates = {}
-        if row['local_path']:
-            old_name = os.path.basename(row['local_path'])
-            # Normalize slashes for Windows compatibility
-            updates['local_path'] = str(new_root_path / old_name).replace('/', '\\')
-        if row['thumbnail_path']:
+        
+        # Relink local_path (preserve relative structure)
+        if row['local_path'] and new_local_root:
+            old_path = str(Path(row['local_path'].replace('\\', '/')))
+            if common_prefix and old_path.startswith(common_prefix):
+                # Replace common prefix with new root
+                rel_path = old_path[len(common_prefix):].lstrip('/\\')
+                updates['local_path'] = str(new_local_root_path / rel_path).replace('/', '\\')
+            else:
+                # Fallback if common prefix fails: just put in root
+                old_name = os.path.basename(row['local_path'])
+                updates['local_path'] = str(new_local_root_path / old_name).replace('/', '\\')
+                
+        # Relink thumbnail_path (thumbnails are always flat)
+        if row['thumbnail_path'] and new_thumbnails_root:
             old_name = os.path.basename(row['thumbnail_path'])
-            updates['thumbnail_path'] = str(new_root_path / old_name).replace('/', '\\')
+            updates['thumbnail_path'] = str(new_thumb_root_path / old_name).replace('/', '\\')
             
         if updates:
             set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
@@ -96,7 +119,7 @@ def relink_paths(db_path, new_root):
     return count
 
 def backup_database(db_path, backup_dir=None):
-    """Creates a copy of the database file with a timestamp."""
+    """Creates a copy of the database file with a timestamp, ensuring WAL is flushed."""
     db_path = Path(db_path)
     if not db_path.exists():
         return None
@@ -106,6 +129,11 @@ def backup_database(db_path, backup_dir=None):
     else:
         backup_dir = Path(backup_dir)
         backup_dir.mkdir(parents=True, exist_ok=True)
+        
+    # Checkpoint WAL before copying
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()
         
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = backup_dir / f"{db_path.stem}_backup_{timestamp}{db_path.suffix}"

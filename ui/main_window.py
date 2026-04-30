@@ -736,15 +736,24 @@ class MainWindow(QMainWindow):
             db_ext, index_ext = import_library_replace(path, temp_dir)
             
             # Relink paths in the imported DB
-            relink_paths(db_ext, img_root)
+            # Для импорта указываем img_root как новую папку для локальных файлов,
+            # а миниатюры всегда направляем в стандартную папку текущей системы.
+            relink_paths(db_ext, new_local_root=img_root, new_thumbnails_root=str(config.THUMBNAILS_DIR))
             
             if mode == "replace":
                 # Full replace
+                
                 # 1. Backup current
                 shutil.copy2(config.DB_PATH, str(config.DB_PATH) + ".bak")
                 shutil.copy2(config.FAISS_PATH, str(config.FAISS_PATH) + ".bak")
                 
                 # 2. Overwrite
+                # Очищаем старые WAL файлы, чтобы избежать коррупции БД
+                wal_path = str(config.DB_PATH) + "-wal"
+                shm_path = str(config.DB_PATH) + "-shm"
+                if os.path.exists(wal_path): os.remove(wal_path)
+                if os.path.exists(shm_path): os.remove(shm_path)
+                
                 shutil.copy2(db_ext, config.DB_PATH)
                 shutil.copy2(index_ext, config.FAISS_PATH)
                 
@@ -782,7 +791,8 @@ class MainWindow(QMainWindow):
     def _relink_images(self, new_root):
         from utils.library_manager import relink_paths
         try:
-            count = relink_paths(config.DB_PATH, new_root)
+            # Считаем, что смена папки в настройках меняет папку миниатюр
+            count = relink_paths(config.DB_PATH, new_thumbnails_root=new_root)
             QMessageBox.information(self, "Refer", f"Updated {count} paths.")
             self._load_assets_for_gallery()
         except Exception as e:
