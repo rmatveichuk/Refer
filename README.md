@@ -30,3 +30,5 @@
 2. Создайте виртуальное окружение: `python -m venv .venv`.
 3. Установите зависимости: `pip install -r requirements.txt`.
 4. Запустите: `python main.py`.
+
+Демонстрация основных функций https://www.youtube.com/watch?v=Xj3BkS9Mx-A
