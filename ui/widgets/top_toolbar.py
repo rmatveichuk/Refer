@@ -80,6 +80,13 @@ class TopToolbar(QWidget):
         layout.addWidget(self.url_input)
         layout.addWidget(self.btn_scrape)
 
+        # Hide scraping UI in release mode
+        import sys
+        if getattr(sys, 'frozen', False):
+            self.parser_combo.hide()
+            self.url_input.hide()
+            self.btn_scrape.hide()
+
         # --- Center Block: Monitoring ---
         layout.addStretch(1)
         self.status_label = QLabel(tr("ready"))

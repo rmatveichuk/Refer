@@ -49,6 +49,8 @@ class MainWindow(QMainWindow):
         self.ai_initializing = False  # Флаг для предотвращения двойной инициализации
         self.search_threshold = 0.6
         self.search_sources = []
+        self.filter_project_id = None
+        self.filter_author = None
         
         self._init_ui()
         self.update_sources_panel()
@@ -189,6 +191,14 @@ class MainWindow(QMainWindow):
     def _on_tab_clicked(self, index):
         tab_text = self.tabs.tabText(index)
         if tab_text in (tr("gallery"), "Галерея", "Gallery"):
+            self.filter_project_id = None
+            self.filter_author = None
+            if hasattr(self, 'search_panel'):
+                self.search_panel.hybrid_input.text_input.clear()
+                self.search_panel.hybrid_input.clear_image()
+                if hasattr(self.search_panel, 'set_selected_tags'):
+                    self.search_panel.set_selected_tags([])
+            self._update_breadcrumbs()
             self._load_assets_for_gallery()
             self.status_label.setText(f"Галерея: Загружены все изображения ({len(self.gallery_model.assets)})")
 
@@ -235,6 +245,7 @@ class MainWindow(QMainWindow):
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
                     width=row['width'], height=row['height'],
+                    project_id=row.get('project_id'),
                     category=row.get('category', '3d_render'),
                     image_type=row.get('image_type', 'Photography'),
                     local_path=row.get('local_path', ''),
@@ -491,6 +502,7 @@ class MainWindow(QMainWindow):
                 assets_to_delete.append(Asset(
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
+                    project_id=row.get('project_id'),
                     image_type=row['image_type'] or 'Photography'
                 ))
 
@@ -551,9 +563,19 @@ class MainWindow(QMainWindow):
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
-            query = "SELECT a.* FROM assets a"
-            conditions = []
-            params = []
+            if getattr(self, 'filter_author', None):
+                query = "SELECT a.* FROM assets a JOIN projects p ON a.project_id = p.id"
+                conditions = []
+                conditions.append("p.author = ?")
+                params = [self.filter_author]
+            else:
+                query = "SELECT a.* FROM assets a"
+                conditions = []
+                params = []
+
+            if getattr(self, 'filter_project_id', None) is not None:
+                conditions.append("a.project_id = ?")
+                params.append(self.filter_project_id)
             
             # --- Логика фильтрации по источникам ---
             web_domains = []
@@ -618,6 +640,7 @@ class MainWindow(QMainWindow):
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
                     width=row['width'], height=row['height'],
+                    project_id=row.get('project_id'),
                     category=row.get('category', '3d_render'),
                     image_type=row.get('image_type', 'Photography'),
                     local_path=row.get('local_path', ''),
@@ -699,6 +722,7 @@ class MainWindow(QMainWindow):
                 asset = Asset(
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
+                    project_id=row.get('project_id'),
                     image_type=row['image_type'] or 'Photography'
                 )
                 self._delete_assets_batch([asset])
@@ -974,6 +998,8 @@ class MainWindow(QMainWindow):
     # === Search Logic ===
 
     def _on_clear_search(self):
+        self.filter_project_id = None
+        self.filter_author = None
         self._load_assets_for_gallery()
         self.status_label.setText("Сброс фильтров. Показаны все выбранные источники.")
         self._update_breadcrumbs() # Clear breadcrumbs
@@ -1095,6 +1121,23 @@ class MainWindow(QMainWindow):
             for tag in tags:
                 add_text_crumb(tag, 'tag', tag)
 
+        # 4. Project Filter
+        if getattr(self, 'filter_project_id', None) is not None:
+            try:
+                with self.db.get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT title FROM projects WHERE id = ?", (self.filter_project_id,))
+                    p_row = cur.fetchone()
+                    p_title = p_row['title'] if p_row else f"Project #{self.filter_project_id}"
+                add_text_crumb(f"📁 {p_title}", 'project')
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error getting project title for breadcrumbs: {e}")
+
+        # 5. Author Filter
+        if getattr(self, 'filter_author', None):
+            add_text_crumb(f"👤 {self.filter_author}", 'author')
+
         # Trigger the actual search
         self._perform_visual_search(text, img_path, threshold or (self.search_panel.slider_sens.value()/100.0), 
                                   sources or self.search_panel.get_selected_sources(), tags)
@@ -1110,11 +1153,16 @@ class MainWindow(QMainWindow):
             if value in tags:
                 tags.remove(value)
                 self.search_panel.set_selected_tags(tags)
+        elif filter_type == 'project':
+            self.filter_project_id = None
+        elif filter_type == 'author':
+            self.filter_author = None
         
         self._update_breadcrumbs() # Re-emit search
 
     def _perform_visual_search(self, text: str, img_path: str, threshold: float, sources: list, tags: list = None):
-        if not text and not img_path and not tags:
+        if not text and not img_path and not tags and not getattr(self, 'filter_project_id', None) and not getattr(self, 'filter_author', None):
+            self._load_assets_for_gallery()
             return
             
         if self.faiss_mgr.index.ntotal == 0:
@@ -1221,6 +1269,15 @@ class MainWindow(QMainWindow):
             joins = []
             where_clauses = []
             params = []
+
+            # --- PROJECT/AUTHOR FILTER ---
+            if getattr(self, 'filter_project_id', None) is not None:
+                where_clauses.append("a.project_id = ?")
+                params.append(self.filter_project_id)
+            if getattr(self, 'filter_author', None):
+                joins.append("JOIN projects p ON a.project_id = p.id")
+                where_clauses.append("p.author = ?")
+                params.append(self.filter_author)
             
             # --- SOURCES FILTER ---
             source_conditions = []
@@ -1267,7 +1324,7 @@ class MainWindow(QMainWindow):
             else:
                 # Simple query without tags
                 where_sql = " AND ".join(where_clauses)
-                query = f"SELECT a.id FROM assets a WHERE {where_sql}"
+                query = f"SELECT a.id FROM assets a {' '.join(joins)} WHERE {where_sql}"
 
             cur.execute(query, params)
             valid_ids = [row['id'] for row in cur.fetchall()]
@@ -1295,7 +1352,7 @@ class MainWindow(QMainWindow):
                         text_match_ids.add(row['id'])
         
         if vector is not None and len(vector) > 0:
-            k = min(500, len(valid_ids))
+            k = min(1000, len(valid_ids))
             distances, ids = self.faiss_mgr.search(vector, k=k, valid_ids=valid_ids)
 
             import math
@@ -1323,7 +1380,7 @@ class MainWindow(QMainWindow):
                 results.append((0.0, int(aid)))
             
             # Добавляем остальные валидные ID
-            for aid in valid_ids[:500]:
+            for aid in valid_ids[:1000]:
                 if aid not in text_match_ids:
                     results.append((1.0, int(aid)))
         
@@ -1350,6 +1407,7 @@ class MainWindow(QMainWindow):
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
                     width=row['width'], height=row['height'],
+                    project_id=row.get('project_id'),
                     category=row.get('category', '3d_render'),
                     image_type=row.get('image_type', 'Photography'),
                     local_path=row.get('local_path', ''),

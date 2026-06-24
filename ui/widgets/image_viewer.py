@@ -66,26 +66,6 @@ class ZoomableImageView(QGraphicsView):
             self.zoom_out()
 
 
-class FloatingDeleteButton(QPushButton):
-    def __init__(self, parent=None):
-        super().__init__("🗑︎", parent) # Added U+FE0E for text presentation
-        self.setFixedSize(44, 44)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(20, 20, 20, 120);
-                color: #555;
-                border: 1px solid #222;
-                border-radius: 22px;
-                font-size: 20px;
-                padding-bottom: 2px;
-            }
-            QPushButton:hover {
-                background-color: rgba(244, 67, 54, 230);
-                color: white;
-                border: none;
-            }
-        """)
 
 
 class ImageViewerWindow(QMainWindow):
@@ -112,10 +92,6 @@ class ImageViewerWindow(QMainWindow):
         layout.addWidget(self.viewer)
         self.setCentralWidget(central)
 
-        # Floating Delete Button
-        self.btn_floating_delete = FloatingDeleteButton(central)
-        self.btn_floating_delete.clicked.connect(self._delete_current_asset)
-        self.btn_floating_delete.raise_()
 
         # Описание от ИИ в Dock-панели (снизу)
         self.dock = QDockWidget("ИИ Описание" if config.CURRENT_LANGUAGE == "ru" else "AI Description", self)
@@ -186,6 +162,19 @@ class ImageViewerWindow(QMainWindow):
 
         toolbar.addSeparator()
 
+        btn_project_label = "📁 Проект" if config.CURRENT_LANGUAGE == "ru" else "📁 Project"
+        btn_author_label = "👤 Автор" if config.CURRENT_LANGUAGE == "ru" else "👤 Author"
+
+        self.btn_filter_project = QPushButton(btn_project_label)
+        self.btn_filter_project.clicked.connect(self._filter_by_project)
+        toolbar.addWidget(self.btn_filter_project)
+
+        self.btn_filter_author = QPushButton(btn_author_label)
+        self.btn_filter_author.clicked.connect(self._filter_by_author)
+        toolbar.addWidget(self.btn_filter_author)
+
+        toolbar.addSeparator()
+
         self.btn_fav = QPushButton("☆ В избранное")
         self.btn_fav.clicked.connect(self._toggle_favorite)
         toolbar.addWidget(self.btn_fav)
@@ -193,6 +182,14 @@ class ImageViewerWindow(QMainWindow):
         self.btn_ai = QPushButton("🤖 ИИ-Анализ")
         self.btn_ai.clicked.connect(self._trigger_ai_analysis)
         toolbar.addWidget(self.btn_ai)
+
+        self.btn_delete = QPushButton("🗑 Удалить")
+        self.btn_delete.setStyleSheet("""
+            QPushButton:hover { background-color: #a83232; color: white; border-color: #cc4444; }
+        """)
+        self.btn_delete.setShortcut(QKeySequence(Qt.Key.Key_Delete))
+        self.btn_delete.clicked.connect(self._delete_current_asset)
+        toolbar.addWidget(self.btn_delete)
 
         self.btn_toggle_desc = QPushButton("📝 Текст")
         self.btn_toggle_desc.setCheckable(True)
@@ -216,12 +213,6 @@ class ImageViewerWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Position floating delete button in top right
-        margin = 20
-        self.btn_floating_delete.move(
-            self.centralWidget().width() - self.btn_floating_delete.width() - margin,
-            margin
-        )
 
     def set_assets(self, assets: list, start_index: int):
         """Открыть viewer, assets — список Asset, start_index — какой открыть."""
@@ -375,6 +366,30 @@ class ImageViewerWindow(QMainWindow):
                 self.btn_toggle_desc.setChecked(False)
                 self.dock.setVisible(False)
 
+            # Проверяем наличие проекта и автора для показа кнопок фильтрации
+            project_id = asset.project_id
+            project_found = False
+            author_found = False
+            if project_id:
+                try:
+                    with self.db.get_connection() as conn:
+                        cur = conn.cursor()
+                        cur.execute("SELECT title, author FROM projects WHERE id = ?", (project_id,))
+                        p_row = cur.fetchone()
+                        if p_row:
+                            project_found = True
+                            title = p_row['title'] or f"Project #{project_id}"
+                            self.btn_filter_project.setToolTip(f"Показать все работы проекта: {title}" if config.CURRENT_LANGUAGE == "ru" else f"Show all project works: {title}")
+                            author_name = p_row['author']
+                            if author_name and author_name.strip():
+                                author_found = True
+                                self.btn_filter_author.setToolTip(f"Показать все работы автора: {author_name}" if config.CURRENT_LANGUAGE == "ru" else f"Show all works by: {author_name}")
+                except Exception as e:
+                    logger.error(f"Error querying project in viewer: {e}")
+            
+            self.btn_filter_project.setVisible(project_found)
+            self.btn_filter_author.setVisible(author_found)
+
     def _toggle_favorite(self):
         if not self.db or self.current_index < 0: return
         asset = self.assets[self.current_index]
@@ -445,3 +460,51 @@ class ImageViewerWindow(QMainWindow):
             self._open_in_browser()
         else:
             super().keyPressEvent(event)
+
+    def _filter_by_project(self):
+        try:
+            if self.current_index < 0 or not self.parent_window:
+                QMessageBox.warning(self, "Error", f"Invalid state: index={self.current_index}, parent={self.parent_window is not None}")
+                return
+            asset = self.assets[self.current_index]
+            project_id = asset.project_id
+            if not project_id:
+                QMessageBox.warning(self, "Error", "No project associated with this asset.")
+                return
+            self.parent_window.filter_project_id = project_id
+            # Очищаем текстовый и визуальный поиск перед фильтрацией, чтобы не конфликтовать
+            if hasattr(self.parent_window, 'search_panel'):
+                self.parent_window.search_panel.hybrid_input.text_input.clear()
+                self.parent_window.search_panel.hybrid_input.clear_image()
+            self.parent_window._update_breadcrumbs()
+            self.close()
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Exception in _filter_by_project", f"Traceback:\n{traceback.format_exc()}")
+
+    def _filter_by_author(self):
+        try:
+            if self.current_index < 0 or not self.parent_window:
+                QMessageBox.warning(self, "Error", f"Invalid state: index={self.current_index}, parent={self.parent_window is not None}")
+                return
+            asset = self.assets[self.current_index]
+            project_id = asset.project_id
+            if not project_id:
+                QMessageBox.warning(self, "Error", "No project associated with this asset.")
+                return
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT author FROM projects WHERE id = ?", (project_id,))
+                p_row = cur.fetchone()
+                if p_row and p_row['author']:
+                    self.parent_window.filter_author = p_row['author']
+                    if hasattr(self.parent_window, 'search_panel'):
+                        self.parent_window.search_panel.hybrid_input.text_input.clear()
+                        self.parent_window.search_panel.hybrid_input.clear_image()
+                    self.parent_window._update_breadcrumbs()
+                    self.close()
+                else:
+                    QMessageBox.warning(self, "Error", "No author found for this project.")
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, "Exception in _filter_by_author", f"Traceback:\n{traceback.format_exc()}")

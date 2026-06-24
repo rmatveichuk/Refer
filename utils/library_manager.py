@@ -75,18 +75,19 @@ def relink_paths(db_path, new_local_root=None, new_thumbnails_root=None):
     common_prefix = ""
     if local_paths and new_local_root:
         try:
-            # os.path.commonpath needs valid paths, we normalize them first
-            valid_paths = [Path(p.replace('\\', '/')) for p in local_paths]
-            common_prefix = str(Path(*os.path.commonprefix([p.parts for p in valid_paths])))
+            # Normalize and split into parts for a more robust common prefix
+            # (commonprefix is character-based, which can break on paths)
+            valid_paths_parts = [Path(p.replace('\\', '/')).parts for p in local_paths]
+            common_prefix_parts = os.path.commonprefix(valid_paths_parts)
+            if common_prefix_parts:
+                common_prefix = str(Path(*common_prefix_parts))
         except Exception as e:
             logger.warning(f"Could not determine common prefix: {e}")
             common_prefix = ""
             
     count = 0
-    if new_local_root:
-        new_local_root_path = Path(new_local_root)
-    if new_thumbnails_root:
-        new_thumb_root_path = Path(new_thumbnails_root)
+    new_local_root_path = Path(new_local_root) if new_local_root else None
+    new_thumb_root_path = Path(new_thumbnails_root) if new_thumbnails_root else None
     
     for row in rows:
         updates = {}

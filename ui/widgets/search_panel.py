@@ -185,6 +185,7 @@ class SearchPanel(QWidget):
         main_layout.addWidget(self.lbl_sources)
 
         self.sources_tree = QTreeWidget()
+        self.sources_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.sources_tree.setHeaderHidden(True)
         self.sources_tree.setIndentation(15)
         self.sources_tree.setColumnCount(1)
@@ -215,7 +216,7 @@ class SearchPanel(QWidget):
         self.sources_tree.clear()
         self.folder_items.clear()
 
-        # 1. Web Sources (ArchDaily & Behance)
+        # 1. Web Sources (ArchDaily & Behance) - Always show in filters
         self.item_archdaily = QTreeWidgetItem(self.sources_tree, ["ArchDaily"])
         self.item_archdaily.setFlags(self.item_archdaily.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         self.item_archdaily.setCheckState(0, Qt.CheckState.Checked if ad_checked else Qt.CheckState.Unchecked)
@@ -226,9 +227,10 @@ class SearchPanel(QWidget):
         self.item_behance.setCheckState(0, Qt.CheckState.Checked if bh_checked else Qt.CheckState.Unchecked)
         self.item_behance.setData(0, Qt.ItemDataRole.UserRole, "behance")
 
-        # 2. Normalize and filter folder paths
+        # 2. Normalize and filter folder paths (excluding web sources)
         norm_folders = []
         for f in folders:
+            if f in ('archdaily', 'behance', 'archdaily.com', 'behance.net'): continue
             if not f or len(f) < 4: continue
             if not all(c.isprintable() for c in f): continue
             norm_folders.append(os.path.normpath(f))
@@ -312,7 +314,7 @@ class SearchPanel(QWidget):
             self.sources_tree.blockSignals(False)
             self._on_source_toggled()
         elif action == all_action:
-            self._clear_all()
+            self._check_all(True)
         elif action == remove_action:
             self.remove_source_requested.emit(path)
 
@@ -404,21 +406,24 @@ class SearchPanel(QWidget):
         if text or img or tags:
             self._search_debounce.start()
 
+    def _check_all(self, state_bool: bool):
+        self.sources_tree.blockSignals(True)
+        state = Qt.CheckState.Checked if state_bool else Qt.CheckState.Unchecked
+        def process_recursive(item):
+            item.setCheckState(0, state)
+            for i in range(item.childCount()): 
+                process_recursive(item.child(i))
+        
+        process_recursive(self.sources_tree.invisibleRootItem())
+        self.sources_tree.blockSignals(False)
+        self._on_source_toggled()
+
     def _clear_all(self):
         self.hybrid_input.clear_all()
         self.slider_sens.setValue(60)
-        self.set_selected_tags([])  # Clear tags as well
-        
-        self.sources_tree.blockSignals(True)
-        def uncheck_recursive(item):
-            item.setCheckState(0, Qt.CheckState.Unchecked)
-            for i in range(item.childCount()): 
-                uncheck_recursive(item.child(i))
-        
-        uncheck_recursive(self.sources_tree.invisibleRootItem())
+        self.set_selected_tags([])
+        self._check_all(False)
         self.sources_tree.collapseAll()
-        self.sources_tree.blockSignals(False)
-        
         self.clear_triggered.emit()
 
     def retranslate_ui(self):

@@ -3,6 +3,10 @@ import sys
 import ctypes
 from pathlib import Path
 
+VERSION = "1.0.1"
+APP_NAME = "Refer"
+OLD_APP_NAME = "ReferAssetManager"
+
 # --- Platform Specific Data Directories ---
 
 def get_resource_path(relative_path: str) -> str:
@@ -15,8 +19,8 @@ def get_resource_path(relative_path: str) -> str:
     return os.path.join(base_path, relative_path)
 
 def get_app_roaming_dir() -> Path:
-    r"""Returns the %AppData%\Refer\ directory for DB and settings."""
-    app_name = "Refer"
+    r"""Returns the %AppData%\[APP_NAME]\ directory for DB and settings."""
+    app_name = APP_NAME
     if sys.platform == "win32":
         # %APPDATA%
         app_data = os.environ.get('APPDATA')
@@ -30,8 +34,8 @@ def get_app_roaming_dir() -> Path:
     return base_dir
 
 def get_app_local_dir() -> Path:
-    r"""Returns the %LocalAppData%\Refer\ directory for heavy models and cache."""
-    app_name = "Refer"
+    r"""Returns the %LocalAppData%\[APP_NAME]\ directory for heavy models and cache."""
+    app_name = APP_NAME
     if sys.platform == "win32":
         # %LOCALAPPDATA%
         local_data = os.environ.get('LOCALAPPDATA')
@@ -112,6 +116,13 @@ TAG_VOCABULARY = {
     ],
     "Type": [
         "exterior", "interior", "residential", "commercial", 
-        "public space", "landscape", "close-up", "furniture"
+        "public space", "landscape", "close-up", "furniture",
+        "living room", "bedroom", "kitchen", "bathroom", "dining room", 
+        "kids room", "study", "home office", "hallway", "corridor", 
+        "closet", "wardrobe", "balcony", "terrace", "studio apartment", "studio",
+        "office", "coworking", "lobby", "reception", "restaurant", "cafe", 
+        "hotel room", "conference room", "meeting room", "retail", "shop", 
+        "showroom", "gym", "fitness", "spa", "wellness", "library", 
+        "gallery", "museum", "photography"
     ]
 }
