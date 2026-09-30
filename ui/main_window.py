@@ -955,14 +955,26 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
         return self.ai
 
-    def start_indexing(self):
+    def start_indexing(self, force_all: bool = False):
         if self.active_indexer:
             return
+
+        if force_all:
+            self.db.reset_all_embeddings()
+            self.faiss_mgr.reset_index()
 
         unindexed = self.db.get_unindexed_assets()
         if not unindexed:
             total_in_index = self.faiss_mgr.index.ntotal
-            QMessageBox.information(self, "Всё проиндексировано", f"Векторов в базе: {total_in_index}")
+            reply = QMessageBox.question(
+                self, 
+                "Библиотека проиндексирована", 
+                f"Векторов в базе: {total_in_index}.\nВсе изображения уже проиндексированы.\n\nХотите переиндексировать библиотеку заново (например, новой моделью SigLIP 2)?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.start_indexing(force_all=True)
             return
 
         self._ensure_ai()

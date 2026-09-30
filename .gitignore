@@ -31,6 +31,7 @@ Desktop.ini
 *.txt
 !requirements.txt
 !README.md
+!registry/*.json
 
 # Одноразовые скрипты и бэкапы
 scripts/

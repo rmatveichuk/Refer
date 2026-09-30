@@ -44,11 +44,17 @@ class AiEngine:
             cache_dir=str(config.MODELS_DIR) if model_path == config.SIGLIP_MODEL else None
         ).to(self.device).eval()
         
-        self.processor = AutoProcessor.from_pretrained(
-            str(model_path), 
-            use_fast=True,
-            cache_dir=str(config.MODELS_DIR) if model_path == config.SIGLIP_MODEL else None
-        )
+        try:
+            self.processor = AutoProcessor.from_pretrained(
+                str(model_path), 
+                use_fast=False,
+                cache_dir=str(config.MODELS_DIR) if model_path == config.SIGLIP_MODEL else None
+            )
+        except Exception:
+            self.processor = AutoProcessor.from_pretrained(
+                str(model_path), 
+                cache_dir=str(config.MODELS_DIR) if model_path == config.SIGLIP_MODEL else None
+            )
         
         # Для параллельной загрузки картинок
         self.executor = ThreadPoolExecutor(max_workers=8)
@@ -102,7 +108,7 @@ class AiEngine:
         """Генерирует вектор для текста (с автопереводом)."""
         english_text = self.translate_ru_to_en(text)
         try:
-            inputs = self.processor(text=[english_text], return_tensors="pt", padding="max_length").to(self.device)
+            inputs = self.processor(text=[english_text], return_tensors="pt", padding="max_length", max_length=64).to(self.device)
             with torch.no_grad():
                 with torch.amp.autocast('cuda', dtype=self.dtype):
                     text_features = self.model.get_text_features(**inputs)

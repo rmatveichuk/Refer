@@ -1,0 +1,2466 @@
+{
+  "version": "1.0.0",
+  "description": "Официальный эталонный реестр лучших мировых архитектурных бюро и ArchViz студий для Refer Benchmark 1.0",
+  "updated_at": "2026-09-30",
+  "statistics": {
+    "total_architecture_studios": 100,
+    "total_archviz_studios": 50,
+    "total_studios": 150
+  },
+  "studios": [
+    {
+      "id": "k-studio",
+      "name": "K-Studio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Greece",
+      "website": "https://k-studio.gr",
+      "portfolio_url": "https://k-studio.gr/projects",
+      "archdaily_url": "https://www.archdaily.com/office/k-studio",
+      "specialties": [
+        "mediterranean_villas",
+        "local_stone",
+        "pergolas",
+        "summer_residences"
+      ],
+      "signature_style": "Dry-stone masonry, woven reed pergolas, terracotta, olive trees, seamless blend with arid Cycladic topography"
+    },
+    {
+      "id": "block722",
+      "name": "Block722",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Greece",
+      "website": "https://block722.com",
+      "portfolio_url": "https://block722.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/block722",
+      "specialties": [
+        "aegean_villas",
+        "natural_stone",
+        "earthy_plaster",
+        "cycladic_modern"
+      ],
+      "signature_style": "Rough Cycladic stone masonry, earthy lime plaster, timber canopies, infinity pools facing Aegean horizon"
+    },
+    {
+      "id": "fran-silvestre",
+      "name": "Fran Silvestre Arquitectos",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://fransilvestrearquitectos.com",
+      "portfolio_url": "https://fransilvestrearquitectos.com/proyectos",
+      "archdaily_url": "https://www.archdaily.com/office/fran-silvestre-arquitectos",
+      "specialties": [
+        "sculptural_minimalism",
+        "white_forms",
+        "cliffside_houses",
+        "pools"
+      ],
+      "signature_style": "Ultra-crisp white curved monoliths, sharp shadows, deep blue water reflections, pure Mediterranean geometry"
+    },
+    {
+      "id": "ramon-esteve",
+      "name": "Ramon Esteve Estudio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://ramonesteve.com",
+      "portfolio_url": "https://ramonesteve.com/arquitectura",
+      "archdaily_url": "https://www.archdaily.com/office/ramon-esteve-estudio",
+      "specialties": [
+        "mediterranean_villas",
+        "white_concrete",
+        "timber_panelling",
+        "infinity_pools"
+      ],
+      "signature_style": "Prismatic concrete volumes, large wooden vertical lattices, integrated Mediterranean garden terraces"
+    },
+    {
+      "id": "harquitectes",
+      "name": "HARQUITECTES",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://harquitectes.com",
+      "portfolio_url": "https://harquitectes.com/projectes",
+      "archdaily_url": "https://www.archdaily.com/office/harquitectes",
+      "specialties": [
+        "raw_brickwork",
+        "bioclimatic_courtyards",
+        "thermal_mass",
+        "honest_materials"
+      ],
+      "signature_style": "Exposed structural ceramic brick, unrendered concrete slabs, cloister courtyards, vegetation curtains"
+    },
+    {
+      "id": "aires-mateus",
+      "name": "Aires Mateus",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Portugal",
+      "website": "https://airesmateus.com",
+      "portfolio_url": "https://airesmateus.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/aires-mateus",
+      "specialties": [
+        "monolithic_voids",
+        "sculptural_light",
+        "limestone",
+        "pure_geometry"
+      ],
+      "signature_style": "Carved architectural masses, pure white and local limestone, dramatic light wells and courtyard voids"
+    },
+    {
+      "id": "bak-gordon",
+      "name": "Bak Gordon Arquitectos",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Portugal",
+      "website": "https://bakgordon.com",
+      "portfolio_url": "https://bakgordon.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/bak-gordon-arquitectos",
+      "specialties": [
+        "terracotta_pigmented_concrete",
+        "pool_courtyards",
+        "southern_villas"
+      ],
+      "signature_style": "Warm reddish-terracotta pigmented concrete, deep porticos, rectangular swimming pools, olive trees"
+    },
+    {
+      "id": "carvalho-araujo",
+      "name": "Carvalho Araújo",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Portugal",
+      "website": "https://carvalhoaraujo.com",
+      "portfolio_url": "https://carvalhoaraujo.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/carvalho-araujo",
+      "specialties": [
+        "hillside_concrete",
+        "sloping_sites",
+        "portuguese_landscape",
+        "pavilions"
+      ],
+      "signature_style": "Brutalist exposed concrete slabs cascading down granite hillsides, integration with waterfalls and pines"
+    },
+    {
+      "id": "alberto-campo-baeza",
+      "name": "Alberto Campo Baeza",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://campobaeza.com",
+      "portfolio_url": "https://campobaeza.com/works",
+      "archdaily_url": "https://www.archdaily.com/office/alberto-campo-baeza",
+      "specialties": [
+        "radical_white_minimalism",
+        "travertine_podiums",
+        "infinite_planes",
+        "horizontal_light"
+      ],
+      "signature_style": "Monumental travertine podiums extending into the ocean, glass boxes under crisp white slabs, blinding sun"
+    },
+    {
+      "id": "rcr-arquitectes",
+      "name": "RCR Arquitectes",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://rcrarquitectes.es",
+      "portfolio_url": "https://rcrarquitectes.es/projectes",
+      "archdaily_url": "https://www.archdaily.com/office/rcr-arquitectes",
+      "specialties": [
+        "corten_steel",
+        "volcanic_stone",
+        "poetic_landscape",
+        "cor-ten_pavilions"
+      ],
+      "signature_style": "Deeply patinated rusted Corten steel, basalt stone, Catalan landscape poetry, filtered slit light"
+    },
+    {
+      "id": "promontorio",
+      "name": "Promontorio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Portugal",
+      "website": "https://promontorio.net",
+      "portfolio_url": "https://promontorio.net/projects",
+      "archdaily_url": "https://www.archdaily.com/office/promontorio",
+      "specialties": [
+        "textured_concrete",
+        "tactile_facades",
+        "contemporary_villas"
+      ],
+      "signature_style": "Graphic relief pattern concrete, fluted masonry, earthy pigments, Portuguese coastal villas"
+    },
+    {
+      "id": "fala-atelier",
+      "name": "Fala Atelier",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Portugal",
+      "website": "https://falaatelier.com",
+      "portfolio_url": "https://falaatelier.com",
+      "archdaily_url": "https://www.archdaily.com/office/fala-atelier",
+      "specialties": [
+        "naive_minimalism",
+        "pastel_tiles",
+        "marble_accents",
+        "portuguese_houses"
+      ],
+      "signature_style": "Playful geometric order, pastel patterned ceramic tiles, marble columns, curved white walls"
+    },
+    {
+      "id": "rudy-ricciotti",
+      "name": "Rudy Ricciotti",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://rudyricciotti.com",
+      "portfolio_url": "https://rudyricciotti.com",
+      "archdaily_url": "https://www.archdaily.com/office/rudy-ricciotti",
+      "specialties": [
+        "uhpc_lace",
+        "mediterranean_shade",
+        "sculptural_mesh"
+      ],
+      "signature_style": "Ultra-high performance fiber concrete mesh, filigree shadows cast on Mediterranean terraces, organic black lace"
+    },
+    {
+      "id": "oab-ferrater",
+      "name": "Office of Architecture in Barcelona (OAB)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://ferrater.com",
+      "portfolio_url": "https://ferrater.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/office-of-architecture-in-barcelona",
+      "specialties": [
+        "mediterranean_geometry",
+        "ceramic_lattice",
+        "coastal_residences"
+      ],
+      "signature_style": "Precise geometric modularity, ceramic sunscreens, stone terraces overlooking the Mediterranean"
+    },
+    {
+      "id": "selgascano",
+      "name": "Selgascano",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://selgascano.net",
+      "portfolio_url": "https://selgascano.net",
+      "archdaily_url": "https://www.archdaily.com/office/selgascano",
+      "specialties": [
+        "translucent_polymers",
+        "nature_wrapped",
+        "organic_pavilions"
+      ],
+      "signature_style": "Curved transparent and yellow acrylic walls immersed in woods, lush garden canopies, light pavilions"
+    },
+    {
+      "id": "vincent-van-duysen",
+      "name": "Vincent Van Duysen Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Belgium",
+      "website": "https://vincentvanduysen.com",
+      "portfolio_url": "https://vincentvanduysen.com/architecture",
+      "archdaily_url": "https://www.archdaily.com/office/vincent-van-duysen-architects",
+      "specialties": [
+        "warm_minimalism",
+        "monolithic_forms",
+        "natural_stone",
+        "tactile_materials"
+      ],
+      "signature_style": "Quiet luxury, bone/sand limestone, bleached oak, deep recessed openings, subtle interplay of shadow and texture"
+    },
+    {
+      "id": "john-pawson",
+      "name": "John Pawson",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://johnpawson.com",
+      "portfolio_url": "https://johnpawson.com/works",
+      "archdaily_url": "https://www.archdaily.com/office/john-pawson",
+      "specialties": [
+        "pure_minimalism",
+        "contemplative_spaces",
+        "stone_monoliths",
+        "quiet_luxury"
+      ],
+      "signature_style": "Uncompromising reduction of visual noise, tactile stone, lime wash, hidden joints, spiritual proportion"
+    },
+    {
+      "id": "peter-zumthor",
+      "name": "Atelier Peter Zumthor",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://zumthor.ch",
+      "portfolio_url": "https://zumthor.ch",
+      "archdaily_url": "https://www.archdaily.com/office/peter-zumthor",
+      "specialties": [
+        "phenomenology",
+        "tactile_craft",
+        "thermal_stone",
+        "rammed_concrete"
+      ],
+      "signature_style": "Sensory weight of raw stone slabs, rammed earth, charred wood, light penetrating narrow slits"
+    },
+    {
+      "id": "valerio-olgiati",
+      "name": "Valerio Olgiati",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://olgiati.net",
+      "portfolio_url": "https://olgiati.net/projects",
+      "archdaily_url": "https://www.archdaily.com/office/valerio-olgiati",
+      "specialties": [
+        "pigmented_in_situ_concrete",
+        "archaic_geometry",
+        "pyramidal_spaces"
+      ],
+      "signature_style": "Reddish and dark monolithic cast-in-place concrete, primitive non-referential geometry, supreme spatial power"
+    },
+    {
+      "id": "david-chipperfield",
+      "name": "David Chipperfield Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom / Germany",
+      "website": "https://davidchipperfield.com",
+      "portfolio_url": "https://davidchipperfield.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/david-chipperfield-architects",
+      "specialties": [
+        "timeless_modernism",
+        "colonnades",
+        "brick_limestone",
+        "proportional_balance"
+      ],
+      "signature_style": "Classical colonnade rhythm, monumental hand-made brickwork, travertine, serene civic elegance"
+    },
+    {
+      "id": "christian-kerez",
+      "name": "Christian Kerez",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://kerez.ch",
+      "portfolio_url": "https://kerez.ch",
+      "archdaily_url": "https://www.archdaily.com/office/christian-kerez",
+      "specialties": [
+        "structural_clarity",
+        "thin_concrete_slabs",
+        "radical_spaces"
+      ],
+      "signature_style": "Ultra-thin concrete slabs, irregular leaning pillars, transparent glass boxes, absolute tectonic boldness"
+    },
+    {
+      "id": "bernardo-bader",
+      "name": "Bernardo Bader Architekten",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Austria",
+      "website": "https://bernardobader.com",
+      "portfolio_url": "https://bernardobader.com/projekte",
+      "archdaily_url": "https://www.archdaily.com/office/bernardo-bader-architekten",
+      "specialties": [
+        "vorarlberg_timber",
+        "alpine_houses",
+        "refined_woodwork"
+      ],
+      "signature_style": "Local spruce and silver fir timber cladding, flawless alpine carpentry, quiet gabled forms, concrete plinths"
+    },
+    {
+      "id": "marte-marte",
+      "name": "Marte.Marte Architekten",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Austria",
+      "website": "https://marte-marte.com",
+      "portfolio_url": "https://marte-marte.com/projekte",
+      "archdaily_url": "https://www.archdaily.com/office/marte-marte-architekten",
+      "specialties": [
+        "rough_exposed_concrete",
+        "monolithic_towers",
+        "alpine_modernism"
+      ],
+      "signature_style": "Imposing monolithic rough-cast concrete, Corten steel cutouts, dramatic mountain presence"
+    },
+    {
+      "id": "innauer-matt",
+      "name": "Innauer-Matt Architekten",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Austria",
+      "website": "https://innauer-matt.com",
+      "portfolio_url": "https://innauer-matt.com/arbeiten",
+      "archdaily_url": "https://www.archdaily.com/office/innauer-matt-architekten",
+      "specialties": [
+        "wooden_lattice_screens",
+        "alpine_residences",
+        "timber_interiors"
+      ],
+      "signature_style": "Intricate fine wood lattice rainscreens, compact vernacular volumes, warm domestic oak spaces"
+    },
+    {
+      "id": "carmody-groarke",
+      "name": "Carmody Groarke",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://carmodygroarke.com",
+      "portfolio_url": "https://carmodygroarke.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/carmody-groarke",
+      "specialties": [
+        "precision_pavilions",
+        "monolithic_timber",
+        "brick_stone"
+      ],
+      "signature_style": "Low-slung pavilions, black zinc and blackened timber roofs, large format picture windows, lake landscapes"
+    },
+    {
+      "id": "stanton-williams",
+      "name": "Stanton Williams",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://stantonwilliams.com",
+      "portfolio_url": "https://stantonwilliams.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/stanton-williams",
+      "specialties": [
+        "tactile_stone",
+        "bronze_details",
+        "tranquil_daylight"
+      ],
+      "signature_style": "Massive dressed limestone blocks, patinated bronze panels, carefully choreographed natural light"
+    },
+    {
+      "id": "pedevilla-architects",
+      "name": "Pedevilla Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Italy",
+      "website": "https://pedevilla.info",
+      "portfolio_url": "https://pedevilla.info/projects",
+      "archdaily_url": "https://www.archdaily.com/office/pedevilla-architects",
+      "specialties": [
+        "dolomite_concrete",
+        "local_pine",
+        "monolithic_chalets"
+      ],
+      "signature_style": "Chalk-white and charcoal tinted local aggregate concrete, hand-planed larch interiors, steep Alpine gables"
+    },
+    {
+      "id": "bergmeisterwolf",
+      "name": "bergmeisterwolf",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Italy",
+      "website": "https://bergmeisterwolf.it",
+      "portfolio_url": "https://bergmeisterwolf.it/projects",
+      "archdaily_url": "https://www.archdaily.com/office/bergmeisterwolf",
+      "specialties": [
+        "hillside_cantilevers",
+        "rustic_stone_walls",
+        "corten_glass"
+      ],
+      "signature_style": "Rough cyclopean fieldstone retaining walls, rusted metal cantilevers, terraced hillside integration"
+    },
+    {
+      "id": "modus-architects",
+      "name": "MoDusArchitects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Italy",
+      "website": "https://modusarchitects.com",
+      "portfolio_url": "https://modusarchitects.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/modusarchitects",
+      "specialties": [
+        "alpine_sculpture",
+        "textured_plaster",
+        "curved_concrete"
+      ],
+      "signature_style": "Sculptural Alpine public and residential buildings, textured bush-hammered concrete, wooden screens"
+    },
+    {
+      "id": "barozzi-veiga",
+      "name": "Barozzi Veiga",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://barozziveiga.com",
+      "portfolio_url": "https://barozziveiga.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/barozzi-veiga",
+      "specialties": [
+        "monolithic_purity",
+        "rhythmic_slits",
+        "noble_plaster"
+      ],
+      "signature_style": "Repetitive vertical vertical rhythms, noble matte monolithic skins, sculptural silence in context"
+    },
+    {
+      "id": "saota",
+      "name": "SAOTA",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "South Africa",
+      "website": "https://www.saota.com",
+      "portfolio_url": "https://www.saota.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/saota",
+      "specialties": [
+        "luxury_villas",
+        "cliffside_houses",
+        "cantilevers",
+        "indoor_outdoor"
+      ],
+      "signature_style": "Dramatic concrete cantilevers, panoramic glazing, seamless infinity pools, warm timber louvers, coastal cliffs"
+    },
+    {
+      "id": "olson-kundig",
+      "name": "Olson Kundig",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://olsonkundig.com",
+      "portfolio_url": "https://olsonkundig.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/olson-kundig",
+      "specialties": [
+        "kinetic_architecture",
+        "raw_steel",
+        "heavy_timber",
+        "rugged_nature"
+      ],
+      "signature_style": "Industrial hand-cranked kinetic shutters, weathered steel plates, massive timber beams, alpine & coastal forests"
+    },
+    {
+      "id": "walker-workshop",
+      "name": "Walker Workshop",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://walkerworkshop.com",
+      "portfolio_url": "https://walkerworkshop.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/walker-workshop",
+      "specialties": [
+        "hillside_villas",
+        "board_formed_concrete",
+        "oak_pass",
+        "panoramic_glass"
+      ],
+      "signature_style": "Low-profile hillside houses, subterranean courtyards, board-formed concrete retaining walls, ancient oak canopies"
+    },
+    {
+      "id": "marmol-radziner",
+      "name": "Marmol Radziner",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://marmol-radziner.com",
+      "portfolio_url": "https://marmol-radziner.com/architecture",
+      "archdaily_url": "https://www.archdaily.com/office/marmol-radziner",
+      "specialties": [
+        "california_modernism",
+        "indoor_outdoor",
+        "steel_frame",
+        "warm_woods"
+      ],
+      "signature_style": "Slender dark steel frames, terrazzo floors, warm cedar ceilings, desert and canyon landscape integration"
+    },
+    {
+      "id": "bates-masi",
+      "name": "Bates Masi + Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://batesmasi.com",
+      "portfolio_url": "https://batesmasi.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/bates-masi-plus-architects",
+      "specialties": [
+        "coastal_residences",
+        "cedar_shingles",
+        "bronze_details",
+        "hamptons_modern"
+      ],
+      "signature_style": "Weathered cedar siding, custom folded bronze connectors, horizontal layered louvers, coastal dune setting"
+    },
+    {
+      "id": "faulkner-architects",
+      "name": "Faulkner Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://faulknerarchitects.com",
+      "portfolio_url": "https://faulknerarchitects.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/faulkner-architects",
+      "specialties": [
+        "mountain_residences",
+        "blackened_steel",
+        "concrete_glass",
+        "alpine_forest"
+      ],
+      "signature_style": "Blackened steel rainscreens, raw concrete shear walls, clear Douglas fir ceilings, rugged Sierra Nevada context"
+    },
+    {
+      "id": "studio-rick-joy",
+      "name": "Studio Rick Joy",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://studiorickjoy.com",
+      "portfolio_url": "https://studiorickjoy.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/studio-rick-joy",
+      "specialties": [
+        "desert_modernism",
+        "rammed_earth",
+        "weathered_steel",
+        "quiet_luxury"
+      ],
+      "signature_style": "Massive rammed-earth monoliths, deep-set square openings, Corten steel, dramatic Sonoran desert light"
+    },
+    {
+      "id": "bohlin-cywinski-jackson",
+      "name": "Bohlin Cywinski Jackson",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://bcj.com",
+      "portfolio_url": "https://bcj.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/bohlin-cywinski-jackson",
+      "specialties": [
+        "timber_pavilions",
+        "glass_houses",
+        "pacific_northwest",
+        "nature_dialogue"
+      ],
+      "signature_style": "Exposed Douglas fir post-and-beam structures, seamless glass curtain walls immersed in tall evergreen forests"
+    },
+    {
+      "id": "durbach-block-jaggers",
+      "name": "Durbach Block Jaggers",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://durbachblockjaggers.com",
+      "portfolio_url": "https://durbachblockjaggers.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/durbach-block-jaggers",
+      "specialties": [
+        "sculptural_cliff_houses",
+        "fluid_forms",
+        "coastal_monoliths"
+      ],
+      "signature_style": "Sculptural curved white forms, dramatic cantilevered balconies over oceanic cliffs, complex geometry"
+    },
+    {
+      "id": "edition-office",
+      "name": "Edition Office",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://edition-office.com",
+      "portfolio_url": "https://edition-office.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/edition-office",
+      "specialties": [
+        "monolithic_concrete",
+        "charred_timber",
+        "bushland_villas",
+        "raw_materiality"
+      ],
+      "signature_style": "Archaic raw concrete pavilions, blackened charred wood, courtyard layouts, dry Australian bush flora"
+    },
+    {
+      "id": "luigi-rosselli",
+      "name": "Luigi Rosselli Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://luigirosselli.com",
+      "portfolio_url": "https://luigirosselli.com/residential",
+      "archdaily_url": "https://www.archdaily.com/office/luigi-rosselli-architects",
+      "specialties": [
+        "rammed_earth_curves",
+        "ribbon_balconies",
+        "sandstone",
+        "residential_villas"
+      ],
+      "signature_style": "Flowing sinuous rammed earth walls, continuous horizontal ribbon terraces, terracotta, warm coastal feel"
+    },
+    {
+      "id": "chenchow-little",
+      "name": "Chenchow Little",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://chenchowlittle.com",
+      "portfolio_url": "https://chenchowlittle.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/chenchow-little",
+      "specialties": [
+        "geometric_screens",
+        "sydney_coastal",
+        "sculptural_interiors"
+      ],
+      "signature_style": "Intricate laser-cut geometric metal screens, sculptural staircases, pure white and timber envelopes"
+    },
+    {
+      "id": "peter-stutchbury",
+      "name": "Peter Stutchbury Architecture",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://peterstutchbury.com.au",
+      "portfolio_url": "https://peterstutchbury.com.au/projects",
+      "archdaily_url": "https://www.archdaily.com/office/peter-stutchbury-architecture",
+      "specialties": [
+        "sustainable_pavilions",
+        "floating_roofs",
+        "corrugated_metal",
+        "wild_nature"
+      ],
+      "signature_style": "Poetic curved hovering canopies, natural ventilation chimneys, corrugated metal and raw timber in wild bush"
+    },
+    {
+      "id": "smart-design-studio",
+      "name": "Smart Design Studio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://smartdesignstudio.com",
+      "portfolio_url": "https://smartdesignstudio.com/architecture",
+      "archdaily_url": "https://www.archdaily.com/office/smart-design-studio",
+      "specialties": [
+        "crisp_minimalism",
+        "sculptural_brick",
+        "monolithic_masonry"
+      ],
+      "signature_style": "Razor-sharp curved brick facades, post-tensioned masonry, serene white interiors, meticulous detail"
+    },
+    {
+      "id": "fearon-hay",
+      "name": "Fearon Hay Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "New Zealand",
+      "website": "https://fearonhay.com",
+      "portfolio_url": "https://fearonhay.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/fearon-hay-architects",
+      "specialties": [
+        "coastal_pavilions",
+        "zinc_roofs",
+        "timber_screens",
+        "island_houses"
+      ],
+      "signature_style": "Refined steel-framed pavilions, sliding perforated mesh screens, dark zinc pitched roofs, wild coastal grass"
+    },
+    {
+      "id": "patterson-associates",
+      "name": "Patterson Associates",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "New Zealand",
+      "website": "https://pattersons.com",
+      "portfolio_url": "https://pattersons.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/patterson-associates",
+      "specialties": [
+        "volcanic_rock_villas",
+        "sculptural_forms",
+        "escapes",
+        "raw_nature"
+      ],
+      "signature_style": "Buildings embedded in volcanic coastal outcrops, geometric glass facades, local rock masonry, oceanic drama"
+    },
+    {
+      "id": "herbst-architects",
+      "name": "Herbst Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "New Zealand",
+      "website": "https://herbstarchitects.co.nz",
+      "portfolio_url": "https://herbstarchitects.co.nz/projects",
+      "archdaily_url": "https://www.archdaily.com/office/herbst-architects",
+      "specialties": [
+        "canopy_architecture",
+        "timber_slat_boxes",
+        "pohutukawa_forest"
+      ],
+      "signature_style": "Delicate timber slat screens filtering coastal sunlight, open lanais, integration beneath mature pohutukawa trees"
+    },
+    {
+      "id": "mackay-lyons-sweetapple",
+      "name": "MacKay-Lyons Sweetapple Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Canada",
+      "website": "https://mlsarchitects.ca",
+      "portfolio_url": "https://mlsarchitects.ca/projects",
+      "archdaily_url": "https://www.archdaily.com/office/mackay-lyons-sweetapple-architects",
+      "specialties": [
+        "coastal_vernacular",
+        "timber_shacks_on_stilts",
+        "atlantic_coast"
+      ],
+      "signature_style": "Weathered cedar-shingled cantilevers hovering over Atlantic granite ledges, extreme coastal minimalism"
+    },
+    {
+      "id": "patkau-architects",
+      "name": "Patkau Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Canada",
+      "website": "https://patkau.ca",
+      "portfolio_url": "https://patkau.ca/projects",
+      "archdaily_url": "https://www.archdaily.com/office/patkau-architects",
+      "specialties": [
+        "sculptural_wood",
+        "extreme_landscapes",
+        "folded_geometry"
+      ],
+      "signature_style": "Folded origami wooden roofs, cantilevered glass living spaces over mountain streams, structural drama"
+    },
+    {
+      "id": "shim-sutcliffe",
+      "name": "Shim-Sutcliffe Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Canada",
+      "website": "https://shim-sutcliffe.com",
+      "portfolio_url": "https://shim-sutcliffe.com",
+      "archdaily_url": "https://www.archdaily.com/office/shim-sutcliffe-architects",
+      "specialties": [
+        "bespoke_craft",
+        "timber_water_reflection",
+        "cast_bronze"
+      ],
+      "signature_style": "Bespoke handcrafted wooden connections, shallow reflecting pools, dark granite, masterclass of joinery"
+    },
+    {
+      "id": "studio-mk27",
+      "name": "Studio MK27 (Marcio Kogan)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Brazil",
+      "website": "https://studiomk27.com.br",
+      "portfolio_url": "https://studiomk27.com.br/projects",
+      "archdaily_url": "https://www.archdaily.com/office/studio-mk27-marcio-kogan",
+      "specialties": [
+        "tropical_modernism",
+        "horizontal_proportions",
+        "timber_slats",
+        "raw_concrete"
+      ],
+      "signature_style": "Radical horizontal planes, board-formed concrete, wooden pivoting panels, lush tropical landscape integration"
+    },
+    {
+      "id": "jacobsen-arquitetura",
+      "name": "Jacobsen Arquitetura",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Brazil",
+      "website": "https://jacobsenarquitetura.com",
+      "portfolio_url": "https://jacobsenarquitetura.com/projetos",
+      "archdaily_url": "https://www.archdaily.com/office/jacobsen-arquitetura",
+      "specialties": [
+        "tropical_villas",
+        "slender_canopies",
+        "timber_ceilings",
+        "glass_pavilions"
+      ],
+      "signature_style": "Ultra-thin hovering timber eaves, slender columns, reflection pools, seamless transparency with nature"
+    },
+    {
+      "id": "studio-arthur-casas",
+      "name": "Studio Arthur Casas",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Brazil / USA",
+      "website": "https://arthurcasas.com",
+      "portfolio_url": "https://arthurcasas.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/studio-arthur-casas",
+      "specialties": [
+        "warm_modernism",
+        "local_stone",
+        "wooden_screens",
+        "residences"
+      ],
+      "signature_style": "Warm earthy tones, cumaru wood, natural stone walls, bespoke furniture, seamless terrace integration"
+    },
+    {
+      "id": "tatiana-bilbao",
+      "name": "Tatiana Bilbao Estudio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Mexico",
+      "website": "https://tatianabilbao.com",
+      "portfolio_url": "https://tatianabilbao.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/tatiana-bilbao-estudio",
+      "specialties": [
+        "rammed_earth",
+        "raw_concrete_geometry",
+        "mexican_landscape"
+      ],
+      "signature_style": "Pigmented terracotta-red concrete, rammed earth walls, stepped residential pavilions amongst rocky hills"
+    },
+    {
+      "id": "sordo-madaleno",
+      "name": "Sordo Madaleno Arquitectos",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Mexico",
+      "website": "https://sordomadaleno.com",
+      "portfolio_url": "https://sordomadaleno.com/architecture",
+      "archdaily_url": "https://www.archdaily.com/office/sordo-madaleno-arquitectos",
+      "specialties": [
+        "stepped_residences",
+        "lush_terraces",
+        "textured_plaster",
+        "resorts"
+      ],
+      "signature_style": "Terraced canyon houses, ochre-washed walls, hanging tropical vines, integrated stone water pools"
+    },
+    {
+      "id": "vtn-architects",
+      "name": "VTN Architects (Vo Trong Nghia)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Vietnam",
+      "website": "https://vtnarchitects.net",
+      "portfolio_url": "https://vtnarchitects.net/projects",
+      "archdaily_url": "https://www.archdaily.com/office/vtn-architects",
+      "specialties": [
+        "bamboo_structures",
+        "breathing_facades",
+        "green_roof_villas"
+      ],
+      "signature_style": "Soaring cathedral bamboo vaults, stepped roof gardens filled with trees, porous perforated brick envelopes"
+    },
+    {
+      "id": "mia-design-studio",
+      "name": "MIA Design Studio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Vietnam",
+      "website": "https://miadesignstudio.com",
+      "portfolio_url": "https://miadesignstudio.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/mia-design-studio",
+      "specialties": [
+        "tropical_villas",
+        "water_curtains",
+        "green_screens",
+        "minimalist_residences"
+      ],
+      "signature_style": "Floating concrete stepping stones across koi ponds, dense tropical green curtains, open-air living pavilions"
+    },
+    {
+      "id": "woha",
+      "name": "WOHA",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Singapore",
+      "website": "https://woha.net",
+      "portfolio_url": "https://woha.net/projects",
+      "archdaily_url": "https://www.archdaily.com/office/woha",
+      "specialties": [
+        "breathing_architecture",
+        "sky_gardens",
+        "biophilic_residences"
+      ],
+      "signature_style": "Deep sculpted organic concrete sky gardens, vertical living greenery facades, tropical cross-ventilation"
+    },
+    {
+      "id": "pezo-von-ellrichshausen",
+      "name": "Pezo von Ellrichshausen",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Chile",
+      "website": "https://pezo.cl",
+      "portfolio_url": "https://pezo.cl/works",
+      "archdaily_url": "https://www.archdaily.com/office/pezo-von-ellrichshausen",
+      "specialties": [
+        "monolithic_geometry",
+        "raw_board_concrete",
+        "isolated_villas",
+        "sculptural_towers"
+      ],
+      "signature_style": "Rotational symmetry, heavy textured board-formed concrete monoliths standing isolated in Chilean landscapes"
+    },
+    {
+      "id": "elemental-aravena",
+      "name": "ELEMENTAL (Alejandro Aravena)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Chile",
+      "website": "https://elementalchile.cl",
+      "portfolio_url": "https://elementalchile.cl/projects",
+      "archdaily_url": "https://www.archdaily.com/office/elemental",
+      "specialties": [
+        "raw_honesty",
+        "monolithic_concrete_solids",
+        "coastal_pavilions"
+      ],
+      "signature_style": "Massive monolithic unpolished concrete blocks, dramatic cutouts framing the Pacific ocean"
+    },
+    {
+      "id": "sanjay-puri",
+      "name": "Sanjay Puri Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "India",
+      "website": "https://sanjaypuriarchitects.com",
+      "portfolio_url": "https://sanjaypuriarchitects.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/sanjay-puri-architects",
+      "specialties": [
+        "sculptural_facets",
+        "desert_villas",
+        "projecting_cantilevers"
+      ],
+      "signature_style": "Dramatic angular folded concrete overhangs, terracotta screens, deeply recessed angled balconies"
+    },
+    {
+      "id": "studio-lotus",
+      "name": "Studio Lotus",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "India",
+      "website": "https://studiolotus.in",
+      "portfolio_url": "https://studiolotus.in/projects",
+      "archdaily_url": "https://www.archdaily.com/office/studio-lotus",
+      "specialties": [
+        "vernacular_craft",
+        "jali_screens",
+        "stone_timber_villas"
+      ],
+      "signature_style": "Intricate stone Jali light screens, hand-chiseled local slate, exposed timber rafters, courtyard biophilia"
+    },
+    {
+      "id": "tadao-ando",
+      "name": "Tadao Ando Architect & Associates",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Japan",
+      "website": "https://tadao-ando.com",
+      "portfolio_url": "https://tadao-ando.com/works",
+      "archdaily_url": "https://www.archdaily.com/office/tadao-ando-architect-and-associates",
+      "specialties": [
+        "fair_faced_concrete",
+        "slits_of_light",
+        "water_mirrors",
+        "geometric_solids"
+      ],
+      "signature_style": "Silky-smooth formwork-pored concrete, dramatic single-source sunlight, reflective shallow water courts"
+    },
+    {
+      "id": "kengo-kuma",
+      "name": "Kengo Kuma & Associates",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Japan",
+      "website": "https://kkaa.co.jp",
+      "portfolio_url": "https://kkaa.co.jp/project",
+      "archdaily_url": "https://www.archdaily.com/office/kengo-kuma-and-associates",
+      "specialties": [
+        "timber_joinery",
+        "permeable_facades",
+        "natural_screens",
+        "biophilic"
+      ],
+      "signature_style": "Intricate interlocking wooden louvers and slats, filtered dappled light, light porous envelopes"
+    },
+    {
+      "id": "shigeru-ban",
+      "name": "Shigeru Ban Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Japan",
+      "website": "https://shigerubanarchitects.com",
+      "portfolio_url": "https://shigerubanarchitects.com/works",
+      "archdaily_url": "https://www.archdaily.com/office/shigeru-ban-architects",
+      "specialties": [
+        "timber_gridshells",
+        "curtain_wall_houses",
+        "innovative_structures"
+      ],
+      "signature_style": "Double-curved timber weave structures, sliding hangar doors turning living rooms into open pavilions"
+    },
+    {
+      "id": "sou-fujimoto",
+      "name": "Sou Fujimoto Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Japan",
+      "website": "https://sou-fujimoto.net",
+      "portfolio_url": "https://sou-fujimoto.net",
+      "archdaily_url": "https://www.archdaily.com/office/sou-fujimoto-architects",
+      "specialties": [
+        "permeable_structures",
+        "primitive_future",
+        "stacked_white_frames"
+      ],
+      "signature_style": "Ultra-thin white steel frames, stacked stepping platforms, living spaces interlocked with trees"
+    },
+    {
+      "id": "sanaa",
+      "name": "SANAA (Kazuyo Sejima + Ryue Nishizawa)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Japan",
+      "website": "https://sanaa.co.jp",
+      "portfolio_url": "https://sanaa.co.jp",
+      "archdaily_url": "https://www.archdaily.com/office/sanaa",
+      "specialties": [
+        "dematerialized_glass",
+        "white_curved_pavilions",
+        "ethereal_light"
+      ],
+      "signature_style": "Ethereal thin curved roofs, borderless curved glass walls, pure white columns, dissolution of mass"
+    },
+    {
+      "id": "bcho-partners",
+      "name": "BCHO Architects Associates",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "South Korea",
+      "website": "https://bchoarchitects.com",
+      "portfolio_url": "https://bchoarchitects.com/works",
+      "archdaily_url": "https://www.archdaily.com/office/bcho-architects-associates",
+      "specialties": [
+        "earth_embedded",
+        "courtyard_houses",
+        "patinated_steel",
+        "subtle_nature"
+      ],
+      "signature_style": "Subterranean earth-sheltered courtyard villas, weathered Corten steel boxes, tranquil water basins"
+    },
+    {
+      "id": "mass-studies",
+      "name": "Mass Studies",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "South Korea",
+      "website": "https://massstudies.com",
+      "portfolio_url": "https://massstudies.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/mass-studies",
+      "specialties": [
+        "curved_domes",
+        "tactile_shingles",
+        "serpentine_pavilions"
+      ],
+      "signature_style": "Sinuous wooden domes, tactile shingled skins, open courtyard houses integrating forest terrain"
+    },
+    {
+      "id": "neri-and-hu",
+      "name": "Neri&Hu Design and Research Office",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "China",
+      "website": "https://neriandhu.com",
+      "portfolio_url": "https://neriandhu.com/works",
+      "archdaily_url": "https://www.archdaily.com/office/neri-and-hu-design-and-research-office",
+      "specialties": [
+        "poetic_materiality",
+        "brick_lattice",
+        "heritage_modernism"
+      ],
+      "signature_style": "Grey reclaimed brick screens, walnut wood paneling, brass details, moody spatial courtyards"
+    },
+    {
+      "id": "mad-architects",
+      "name": "MAD Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "China",
+      "website": "https://i-mad.com",
+      "portfolio_url": "https://i-mad.com/work",
+      "archdaily_url": "https://www.archdaily.com/office/mad-architects",
+      "specialties": [
+        "fluid_organic_forms",
+        "shanshui_city",
+        "sculptural_envelopes"
+      ],
+      "signature_style": "Flowing aerodynamic white ribbons, undulating aluminum surfaces, integration with reflective lakes"
+    },
+    {
+      "id": "snohetta",
+      "name": "Snøhetta",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Norway",
+      "website": "https://snohetta.com",
+      "portfolio_url": "https://snohetta.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/snohetta",
+      "specialties": [
+        "landscape_integration",
+        "nordic_materials",
+        "public_and_pavilions",
+        "stone_wood"
+      ],
+      "signature_style": "Buildings as walkable landscape slopes, charred timber, rough quarried stone, atmospheric Nordic mist"
+    },
+    {
+      "id": "cobe",
+      "name": "Cobe",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Denmark",
+      "website": "https://cobe.dk",
+      "portfolio_url": "https://cobe.dk/projects",
+      "archdaily_url": "https://www.archdaily.com/office/cobe",
+      "specialties": [
+        "nordic_timber",
+        "curved_roofs",
+        "waterfront_architecture",
+        "civic_housing"
+      ],
+      "signature_style": "Warm Scandinavian timber envelopes, soft rounded corners, expansive social terraces, maritime clarity"
+    },
+    {
+      "id": "dorte-mandrup",
+      "name": "Dorte Mandrup",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Denmark",
+      "website": "https://dortemandrup.dk",
+      "portfolio_url": "https://dortemandrup.dk/work",
+      "archdaily_url": "https://www.archdaily.com/office/dorte-mandrup",
+      "specialties": [
+        "extreme_landscapes",
+        "sculptural_roofs",
+        "timber_and_thatch",
+        "unesco_centers"
+      ],
+      "signature_style": "Twisted aerofoil roofs, integration with icebergs and coastal dunes, weathered timber and thatch"
+    },
+    {
+      "id": "big-bjarke-ingels",
+      "name": "BIG (Bjarke Ingels Group)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Denmark",
+      "website": "https://big.dk",
+      "portfolio_url": "https://big.dk/projects",
+      "archdaily_url": "https://www.archdaily.com/office/big-bjarke-ingels-group",
+      "specialties": [
+        "hedonistic_sustainability",
+        "stepped_terraces",
+        "sculptural_twists",
+        "residential"
+      ],
+      "signature_style": "Stepped green landscaped terraces, shifting box modules, loops, bold programmatic hybrid forms"
+    },
+    {
+      "id": "3xn",
+      "name": "3XN",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Denmark",
+      "website": "https://3xn.com",
+      "portfolio_url": "https://3xn.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/3xn",
+      "specialties": [
+        "sculptural_timber",
+        "curved_atriums",
+        "human_centric"
+      ],
+      "signature_style": "Spiraling wooden central staircases, fluted timber facades, daylight-infused organic floorplates"
+    },
+    {
+      "id": "henning-larsen",
+      "name": "Henning Larsen",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Denmark",
+      "website": "https://henninglarsen.com",
+      "portfolio_url": "https://henninglarsen.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/henning-larsen",
+      "specialties": [
+        "daylight_design",
+        "mass_timber",
+        "scandinavian_sustainability"
+      ],
+      "signature_style": "Daylight-sculpted atriums, mass-timber beams and columns, green roofs, maritime wood facades"
+    },
+    {
+      "id": "herzog-de-meuron",
+      "name": "Herzog & de Meuron",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://herzogdemeuron.com",
+      "portfolio_url": "https://herzogdemeuron.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/herzog-and-de-meuron",
+      "specialties": [
+        "material_innovation",
+        "perforated_skins",
+        "stacked_forms",
+        "iconic_residences"
+      ],
+      "signature_style": "Subtle surface textures, gabions, perforated copper panels, stacked house forms, tectonic depth"
+    },
+    {
+      "id": "foster-and-partners",
+      "name": "Foster + Partners",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://fosterandpartners.com",
+      "portfolio_url": "https://fosterandpartners.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/foster-plus-partners",
+      "specialties": [
+        "high_tech",
+        "sustainable_megastructures",
+        "glass_steel",
+        "luxury_residences"
+      ],
+      "signature_style": "Precision engineering, structural expressiveness, curved glass, diagrids, sleek metallic canopies"
+    },
+    {
+      "id": "heatherwick-studio",
+      "name": "Heatherwick Studio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://heatherwick.com",
+      "portfolio_url": "https://heatherwick.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/heatherwick-studio",
+      "specialties": [
+        "biophilic_sculpture",
+        "custom_terracotta",
+        "stacked_planters"
+      ],
+      "signature_style": "Giant sculptural bronze-and-terracotta planter columns, fluted bay windows, handmade tactile finishes"
+    },
+    {
+      "id": "zaha-hadid",
+      "name": "Zaha Hadid Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://zaha-hadid.com",
+      "portfolio_url": "https://zaha-hadid.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/zaha-hadid-architects",
+      "specialties": [
+        "parametric_fluidity",
+        "dynamic_curves",
+        "futuristic_residences"
+      ],
+      "signature_style": "Sinuous flowing double-curved fiber-concrete envelopes, aerodynamic canopies, sculptural futuristic forms"
+    },
+    {
+      "id": "mvrdv",
+      "name": "MVRDV",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Netherlands",
+      "website": "https://mvrdv.com",
+      "portfolio_url": "https://mvrdv.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/mvrdv",
+      "specialties": [
+        "pixelated_volumes",
+        "glass_brick_facades",
+        "rooftop_villages"
+      ],
+      "signature_style": "Translucent structural glass bricks, cantilevering pixel boxes, vibrant stacked housing landscapes"
+    },
+    {
+      "id": "unstudio",
+      "name": "UNStudio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Netherlands",
+      "website": "https://unstudio.com",
+      "portfolio_url": "https://unstudio.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/unstudio",
+      "specialties": [
+        "geometric_ribbons",
+        "twisting_facades",
+        "integrated_smart_villas"
+      ],
+      "signature_style": "Continuous twisting white exterior bands, smooth curves, parametric double-height living atriums"
+    },
+    {
+      "id": "oma",
+      "name": "OMA (Office for Metropolitan Architecture)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Netherlands",
+      "website": "https://oma.com",
+      "portfolio_url": "https://oma.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/oma",
+      "specialties": [
+        "radical_concepts",
+        "raw_material_collage",
+        "monumental_cutouts"
+      ],
+      "signature_style": "Unexpected clashes of raw travertine, corrugated fiberglass, aluminum foam, and bold pure geometries"
+    },
+    {
+      "id": "mecanoo",
+      "name": "Mecanoo",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Netherlands",
+      "website": "https://mecanoo.nl",
+      "portfolio_url": "https://mecanoo.nl/Projects",
+      "archdaily_url": "https://www.archdaily.com/office/mecanoo",
+      "specialties": [
+        "curved_timber_ceilings",
+        "organic_pavilions",
+        "villa_landscapes"
+      ],
+      "signature_style": "Floating wave-form timber canopies, continuous full-height frameless glass walls, water garden settings"
+    },
+    {
+      "id": "lan-architecture",
+      "name": "LAN Architecture",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://lan-paris.com",
+      "portfolio_url": "https://lan-paris.com/en/projects",
+      "archdaily_url": "https://www.archdaily.com/office/lan-architecture",
+      "specialties": [
+        "urban_facades",
+        "grid_elegance",
+        "reflective_bronze"
+      ],
+      "signature_style": "Immaculate repetitive window grids, black mirrored glass, reflective bronze frames, Parisian restraint"
+    },
+    {
+      "id": "lacaton-vassal",
+      "name": "Lacaton & Vassal",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://lacatonvassal.com",
+      "portfolio_url": "https://lacatonvassal.com",
+      "archdaily_url": "https://www.archdaily.com/office/lacaton-and-vassal-architectes",
+      "specialties": [
+        "winter_gardens",
+        "polycarbonate_sheets",
+        "generous_living_spaces"
+      ],
+      "signature_style": "Thermal greenhouse extensions, corrugated clear polycarbonate, raw steel frames, light-filled rooms"
+    },
+    {
+      "id": "grafton-architects",
+      "name": "Grafton Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Ireland",
+      "website": "https://graftonarchitects.ie",
+      "portfolio_url": "https://graftonarchitects.ie",
+      "archdaily_url": "https://www.archdaily.com/office/grafton-architects",
+      "specialties": [
+        "monumental_concrete",
+        "deep_spatial_relief",
+        "civic_weight"
+      ],
+      "signature_style": "Heavy sculptural concrete cantilevers, deep shadowed recesses, interlocking multi-level public halls"
+    },
+    {
+      "id": "maccreanor-lavington",
+      "name": "Maccreanor Lavington",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "United Kingdom / Netherlands",
+      "website": "https://maccreanorlavington.com",
+      "portfolio_url": "https://maccreanorlavington.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/maccreanor-lavington",
+      "specialties": [
+        "masterclass_brickwork",
+        "classical_proportions",
+        "residential_housing"
+      ],
+      "signature_style": "Superb dark and buff brickwork bonds, deep reveals, precast stone lintels, timeless urban architecture"
+    },
+    {
+      "id": "noa-network",
+      "name": "noa* network of architecture",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Italy / Austria",
+      "website": "https://noa.network",
+      "portfolio_url": "https://noa.network/en/projects",
+      "archdaily_url": "https://www.archdaily.com/office/noa-network-of-architecture",
+      "specialties": [
+        "alpine_cantilevers",
+        "glass_pools",
+        "timber_ribs",
+        "wellness_villas"
+      ],
+      "signature_style": "Cantilevered infinity pools suspended over mountain valleys, larch timber facades, dramatic alpine topography"
+    },
+    {
+      "id": "peter-pichler",
+      "name": "Peter Pichler Architecture",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Italy",
+      "website": "https://peterpichler.eu",
+      "portfolio_url": "https://peterpichler.eu/projects",
+      "archdaily_url": "https://www.archdaily.com/office/peter-pichler-architecture",
+      "specialties": [
+        "sculptural_chalets",
+        "curved_ribs",
+        "blackened_timber",
+        "alpine_villas"
+      ],
+      "signature_style": "Expressive parametric wooden rib structures, blackened timber slats, expansive glass framing mountain peaks"
+    },
+    {
+      "id": "studio-ko",
+      "name": "Studio KO",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "France / Morocco",
+      "website": "https://studioko.fr",
+      "portfolio_url": "https://studioko.fr/projects",
+      "archdaily_url": "https://www.archdaily.com/office/studio-ko",
+      "specialties": [
+        "terracotta_brickwork",
+        "desert_villas",
+        "ochre_plaster",
+        "monolithic_stone"
+      ],
+      "signature_style": "Handmade red terracotta brick lace, monolithic earth plaster, secluded courtyards, Atlas mountain villas"
+    },
+    {
+      "id": "mold-architects",
+      "name": "Mold Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Greece",
+      "website": "https://moldarchitects.com",
+      "portfolio_url": "https://moldarchitects.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/mold-architects",
+      "specialties": [
+        "subterranean_villas",
+        "cliffside_cantilevers",
+        "caved_architecture",
+        "aegean"
+      ],
+      "signature_style": "Subterranean caved residences sliced into Aegean rocky cliffs, dry-stone retaining walls, invisible roofs"
+    },
+    {
+      "id": "deca-architecture",
+      "name": "DecaArchitecture",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Greece",
+      "website": "https://deca.gr",
+      "portfolio_url": "https://deca.gr/projects",
+      "archdaily_url": "https://www.archdaily.com/office/deca-architecture",
+      "specialties": [
+        "earth_sheltered",
+        "arid_cyclades",
+        "stone_bridging",
+        "sustainable_villas"
+      ],
+      "signature_style": "Earth-sheltered structures bridging arid valleys, natural stone walls, integration with wild thyme and rocks"
+    },
+    {
+      "id": "ooak-architects",
+      "name": "OOAK Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Greece / Sweden",
+      "website": "https://ooakarchitects.com",
+      "portfolio_url": "https://ooakarchitects.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/ooak-architects",
+      "specialties": [
+        "cliff_cantilevers",
+        "raw_exposed_concrete",
+        "karpathos_residences"
+      ],
+      "signature_style": "Bold board-formed concrete cantilevers projecting dramatically over Aegean coastal precipices"
+    },
+    {
+      "id": "wespi-de-meuron-romeo",
+      "name": "Wespi de Meuron Romeo architekten",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://wespidemeuron.ch",
+      "portfolio_url": "https://wespidemeuron.ch/projects",
+      "archdaily_url": "https://www.archdaily.com/office/wespi-de-meuron-romeo-architekten",
+      "specialties": [
+        "raw_stone_monoliths",
+        "lake_maggiore_villas",
+        "minimalist_cave_spaces"
+      ],
+      "signature_style": "Archaic rough natural stone walls, crisp rectangular window incisions, lake reflections, timeless Alpine peace"
+    },
+    {
+      "id": "buchner-brundler",
+      "name": "Buchner Bründler Architekten",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://bparch.ch",
+      "portfolio_url": "https://bparch.ch/bauten",
+      "archdaily_url": "https://www.archdaily.com/office/buchner-brundler-architekten",
+      "specialties": [
+        "raw_in_situ_concrete",
+        "mountain_retreats",
+        "tactile_minimalism"
+      ],
+      "signature_style": "Exposed in-situ concrete interiors, monolithic cast kitchens and hearths, pure spatial subtraction"
+    },
+    {
+      "id": "gus-wustemann",
+      "name": "Gus Wüstemann Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland / Spain",
+      "website": "https://guswustemann.com",
+      "portfolio_url": "https://guswustemann.com/projects",
+      "archdaily_url": "https://www.archdaily.com/office/gus-wustemann-architects",
+      "specialties": [
+        "monolithic_concrete_bars",
+        "stone_patios",
+        "flowing_interior_landscapes"
+      ],
+      "signature_style": "Continuous monolithic fair-faced concrete benches and ceilings, deep courtyards, Catalan and Swiss rigor"
+    },
+    {
+      "id": "studio-mumbai",
+      "name": "Studio Mumbai (Bijoy Jain)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "India",
+      "website": "https://studiomumbai.com",
+      "portfolio_url": "https://studiomumbai.com",
+      "archdaily_url": "https://www.archdaily.com/office/studio-mumbai",
+      "specialties": [
+        "tactile_handicraft",
+        "rammed_earth_timber",
+        "tropical_serenity"
+      ],
+      "signature_style": "Deeply tactile vernacular craft, handmade slatted teak timber screens, lime plaster, cooling water courtyards"
+    },
+    {
+      "id": "morger-partner",
+      "name": "Morger Partner Architekten",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://morgerpartner.ch",
+      "portfolio_url": "https://morgerpartner.ch/bauten",
+      "archdaily_url": "https://www.archdaily.com/office/morger-partner-architekten",
+      "specialties": [
+        "monolithic_stone_clarity",
+        "basel_modernism",
+        "timeless_envelopes"
+      ],
+      "signature_style": "Crisp flush stone and bronze facades, geometric perfection, quiet civic and residential presence"
+    },
+    {
+      "id": "mir",
+      "name": "Mir",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Norway",
+      "website": "https://www.mir.no",
+      "portfolio_url": "https://www.mir.no",
+      "archdaily_url": "",
+      "specialties": [
+        "cinematic_concept",
+        "nordic_overcast",
+        "atmospheric_mood",
+        "unbuilt_icons"
+      ],
+      "signature_style": "The undisputed benchmark of natural light, Nordic haze, subtle imperfection, filmic grain, poetic narrative"
+    },
+    {
+      "id": "the-boundary",
+      "name": "The Boundary",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom / USA",
+      "website": "https://www.the-boundary.com",
+      "portfolio_url": "https://www.the-boundary.com/projects",
+      "archdaily_url": "",
+      "specialties": [
+        "luxury_residential",
+        "hospitality",
+        "hyper_realism",
+        "interiors_exteriors"
+      ],
+      "signature_style": "Flawless physical shaders, natural light bounce, hyper-realistic foliage scattering, architectural photography fidelity"
+    },
+    {
+      "id": "luxigon",
+      "name": "Luxigon",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://www.luxigon.com",
+      "portfolio_url": "https://www.luxigon.com",
+      "archdaily_url": "",
+      "specialties": [
+        "competition_renders",
+        "urban_scale",
+        "dramatic_lighting",
+        "high_contrast"
+      ],
+      "signature_style": "High-contrast dynamic skies, deep moody silhouettes, energetic crowds, bold cinematic concept art"
+    },
+    {
+      "id": "brick-visual",
+      "name": "Brick Visual",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Hungary",
+      "website": "https://brickvisual.com",
+      "portfolio_url": "https://brickvisual.com/works",
+      "archdaily_url": "",
+      "specialties": [
+        "classical_composition",
+        "painterly_harmony",
+        "cultural_centers",
+        "masterplans"
+      ],
+      "signature_style": "Classical art composition rules, Golden Ratio framing, painterly color harmonies, controlled depth of field"
+    },
+    {
+      "id": "binyan-studios",
+      "name": "Binyan Studios",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Australia / USA",
+      "website": "https://binyanstudios.com",
+      "portfolio_url": "https://binyanstudios.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "warm_evening",
+        "luxury_residential",
+        "towers",
+        "resorts"
+      ],
+      "signature_style": "Warm golden hour, dusk blue hour balance, sophisticated interior ambient glow, luxury lifestyle allure"
+    },
+    {
+      "id": "dbox",
+      "name": "DBOX",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "USA / UK",
+      "website": "https://dbox.com",
+      "portfolio_url": "https://dbox.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "ultra_luxury_towers",
+        "penthouse_interiors",
+        "global_real_estate"
+      ],
+      "signature_style": "Pristine architectural clarity, Manhattan sunset tones, immaculate interior textures, high-fashion staging"
+    },
+    {
+      "id": "arqui9",
+      "name": "Arqui9",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://arqui9.com",
+      "portfolio_url": "https://arqui9.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "matte_painting",
+        "cinematic_concepts",
+        "visual_storytelling",
+        "competitions"
+      ],
+      "signature_style": "Mastery of digital matte painting, dramatic sky transitions, wet road reflections, evocative lighting"
+    },
+    {
+      "id": "tegmark",
+      "name": "Tegmark",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Sweden",
+      "website": "https://tegmark.net",
+      "portfolio_url": "https://tegmark.net/work",
+      "archdaily_url": "",
+      "specialties": [
+        "scandinavian_subtlety",
+        "understated_luxury",
+        "nordic_nature"
+      ],
+      "signature_style": "Quiet Scandinavian minimalism, pale sunlight, crisp cold air, bleached timber, effortless authenticity"
+    },
+    {
+      "id": "blackhaus",
+      "name": "Blackhaus",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://blackhaus.es",
+      "portfolio_url": "https://blackhaus.es/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "mediterranean_sunlight",
+        "warm_materials",
+        "luxury_villas",
+        "pools"
+      ],
+      "signature_style": "Crisp intense Mediterranean daylight, travertine and warm concrete, lush pine and olive foliage, clear blue water"
+    },
+    {
+      "id": "plomp",
+      "name": "Plomp",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Netherlands",
+      "website": "https://plomp.net",
+      "portfolio_url": "https://plomp.net/work",
+      "archdaily_url": "",
+      "specialties": [
+        "expressive_atmosphere",
+        "vibrant_visuals",
+        "cultural_landmarks"
+      ],
+      "signature_style": "Rich emotional color grading, kinetic energy, atmospheric fog and rain, cinematic depth"
+    },
+    {
+      "id": "norm-li",
+      "name": "Norm Li",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Canada",
+      "website": "https://normli.ca",
+      "portfolio_url": "https://normli.ca/work",
+      "archdaily_url": "",
+      "specialties": [
+        "clean_photorealism",
+        "commercial_and_residential",
+        "canadian_urbanism"
+      ],
+      "signature_style": "Crisp clean daylight, physically balanced materials, accurate urban contextual entourage"
+    },
+    {
+      "id": "wax-architectural",
+      "name": "WAX Architectural Visualisations",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Belgium",
+      "website": "https://wax-atelier.com",
+      "portfolio_url": "https://wax-atelier.com/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "warm_minimalism",
+        "architectural_photography_style",
+        "natural_wood_stone"
+      ],
+      "signature_style": "Looks indistinguishable from high-end architectural photo shoots in Kinfolk or Cereal magazine"
+    },
+    {
+      "id": "beauty-and-the-bit",
+      "name": "Beauty & The Bit",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://beautyandthebit.com",
+      "portfolio_url": "https://beautyandthebit.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "film_narrative",
+        "cinematography",
+        "poetic_architecture"
+      ],
+      "signature_style": "Story-driven frames, anamorphic lens flares, moody dawn/dusk light, emotionally charged architecture"
+    },
+    {
+      "id": "secchi-smith",
+      "name": "Secchi Smith",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://secchismith.com",
+      "portfolio_url": "https://secchismith.com/projects",
+      "archdaily_url": "",
+      "specialties": [
+        "tactile_materials",
+        "botanical_perfection",
+        "quiet_british_architecture"
+      ],
+      "signature_style": "Immaculate foliage shaders, subtle English overcast light, tactile brick and weathered timber"
+    },
+    {
+      "id": "forbes-massie",
+      "name": "Forbes Massie Studio",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://forbesmassie.com",
+      "portfolio_url": "https://forbesmassie.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "dark_atmospheric",
+        "painterly_sculpture",
+        "stone_monoliths"
+      ],
+      "signature_style": "Moody low-key lighting, dramatic chiaroscuro, heavy mist, deep charcoal and limestone tones"
+    },
+    {
+      "id": "play-time",
+      "name": "Play-Time",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://play-time.es",
+      "portfolio_url": "https://play-time.es/projects",
+      "archdaily_url": "",
+      "specialties": [
+        "vibrant_mediterranean",
+        "dynamic_light",
+        "crisp_architecture"
+      ],
+      "signature_style": "Warm golden light, natural shadows, lively Mediterranean greenery, contemporary Spanish villas"
+    },
+    {
+      "id": "slashcube",
+      "name": "Slashcube",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Switzerland",
+      "website": "https://slashcube.ch",
+      "portfolio_url": "https://slashcube.ch/works",
+      "archdaily_url": "",
+      "specialties": [
+        "alpine_landscapes",
+        "modern_villas",
+        "swiss_precision"
+      ],
+      "signature_style": "Dolomite rock textures, crisp alpine morning sun, snow and timber integration, pure Swiss realism"
+    },
+    {
+      "id": "one-wave-studio",
+      "name": "One Wave Studio",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Poland",
+      "website": "https://onewavestudio.com",
+      "portfolio_url": "https://onewavestudio.com/projects",
+      "archdaily_url": "",
+      "specialties": [
+        "warm_evening",
+        "hyper_realistic_foliage",
+        "villa_exteriors"
+      ],
+      "signature_style": "Ultra-realistic lawn and garden scattering, soft dusk interior glows, natural stone textures"
+    },
+    {
+      "id": "artefactory-lab",
+      "name": "ArtefactoryLab",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://artefactorylab.com",
+      "portfolio_url": "https://artefactorylab.com/projects",
+      "archdaily_url": "",
+      "specialties": [
+        "parisian_elegance",
+        "competition_pavilions",
+        "cultural_masterpieces"
+      ],
+      "signature_style": "Sophisticated French color palette, gentle aerial haze, elegant scale figures, refined cultural architecture"
+    },
+    {
+      "id": "dim-studio",
+      "name": "Dim Studio",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Italy",
+      "website": "https://dimstudio.it",
+      "portfolio_url": "https://dimstudio.it/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "italian_tactility",
+        "luxury_interiors_and_villas",
+        "terracotta_stone"
+      ],
+      "signature_style": "Warm Tuscan and Milanese palettes, soft shadow falloff, bespoke furniture and plaster textures"
+    },
+    {
+      "id": "hayes-davidson",
+      "name": "Hayes Davidson",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://hayesdavidson.com",
+      "portfolio_url": "https://hayesdavidson.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "pioneering_archviz",
+        "london_landmarks",
+        "towers"
+      ],
+      "signature_style": "Refined classical architectural render traditions, pristine atmospheric balance in London light"
+    },
+    {
+      "id": "vyonyx",
+      "name": "Vyonyx",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://vyonyx.com",
+      "portfolio_url": "https://vyonyx.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "expressive_mixed_media",
+        "competition_art",
+        "collage_realism"
+      ],
+      "signature_style": "Expressive hybrid visual art, painterly digital layers, moody European civic and residential frames"
+    },
+    {
+      "id": "bloomimages",
+      "name": "Bloomimages",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Germany",
+      "website": "https://bloomimages.de",
+      "portfolio_url": "https://bloomimages.de/work",
+      "archdaily_url": "",
+      "specialties": [
+        "poetic_light",
+        "atmospheric_clarity",
+        "contemporary_architecture"
+      ],
+      "signature_style": "Subtle morning and autumn sunlight, quiet emotional presence, natural materials"
+    },
+    {
+      "id": "pure-render",
+      "name": "Pure Render",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Germany",
+      "website": "https://purerender.com",
+      "portfolio_url": "https://purerender.com/projekte",
+      "archdaily_url": "",
+      "specialties": [
+        "german_precision",
+        "photoreal_facades",
+        "interiors"
+      ],
+      "signature_style": "High-precision physical correctness, crisp glass reflections, clean contemporary surfaces"
+    },
+    {
+      "id": "xoio",
+      "name": "xoio",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Germany",
+      "website": "https://xoio.de",
+      "portfolio_url": "https://xoio.de/work",
+      "archdaily_url": "",
+      "specialties": [
+        "interior_craft",
+        "warm_mood",
+        "residential_storytelling"
+      ],
+      "signature_style": "Artisan interior staging, tactile wood and fabric shaders, soft natural daylighting"
+    },
+    {
+      "id": "render-taxi",
+      "name": "Render Taxi",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Germany / Spain",
+      "website": "https://rendertaxi.de",
+      "portfolio_url": "https://rendertaxi.de/works",
+      "archdaily_url": "",
+      "specialties": [
+        "urban_villas",
+        "sharp_materials",
+        "commercial_housing"
+      ],
+      "signature_style": "Vibrant and clear natural sunlight, clean architectural lines, balanced composition"
+    },
+    {
+      "id": "doug-and-wolf",
+      "name": "Doug & Wolf",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://doug-wolf.com",
+      "portfolio_url": "https://doug-wolf.com/projects",
+      "archdaily_url": "",
+      "specialties": [
+        "french_subtlety",
+        "refined_mood",
+        "residential_interiors"
+      ],
+      "signature_style": "Airy light-flooded French apartments and pavilions, delicate color tones, serene living"
+    },
+    {
+      "id": "l-autre-image",
+      "name": "L'Autre Image",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://lautreimage.com",
+      "portfolio_url": "https://lautreimage.com/projets",
+      "archdaily_url": "",
+      "specialties": [
+        "parisian_luxury",
+        "haussmannian_and_modern",
+        "real_estate_art"
+      ],
+      "signature_style": "Sophisticated chic Parisian lighting, limestone and zinc textures, luxury staging"
+    },
+    {
+      "id": "berga-gonzalez",
+      "name": "Berga & Gonzalez Arquitectos",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://bergagonzalez.com",
+      "portfolio_url": "https://bergagonzalez.com/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "sunny_mediterranean",
+        "clean_villas",
+        "pools_and_patios"
+      ],
+      "signature_style": "Bright warm Mediterranean sun, white architecture, crystal clear water, pristine rendering"
+    },
+    {
+      "id": "metroarea",
+      "name": "Metroarea",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Italy",
+      "website": "https://metroarea.it",
+      "portfolio_url": "https://metroarea.it",
+      "archdaily_url": "",
+      "specialties": [
+        "italian_villas",
+        "luxury_retreats",
+        "sensual_materials"
+      ],
+      "signature_style": "Tuscan olive groves, travertine terraces, deep evening blue skies, sensual lighting"
+    },
+    {
+      "id": "motyw",
+      "name": "Motyw",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Poland",
+      "website": "https://motyw.org",
+      "portfolio_url": "https://motyw.org",
+      "archdaily_url": "",
+      "specialties": [
+        "atmospheric_art",
+        "misty_forests",
+        "dark_architecture"
+      ],
+      "signature_style": "Dense atmospheric fog, wet dark wood, moody autumnal light, cinematic poetry"
+    },
+    {
+      "id": "lumina-cg",
+      "name": "Lumina CG",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Brazil",
+      "website": "https://luminacg.com",
+      "portfolio_url": "https://luminacg.com",
+      "archdaily_url": "",
+      "specialties": [
+        "tropical_modernism",
+        "dusk_interior_glow",
+        "warm_woods"
+      ],
+      "signature_style": "Warm Brazilian evening illumination, lush tropical trees, exposed concrete and timber"
+    },
+    {
+      "id": "third-visual",
+      "name": "Third Visual",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://thirdvisual.com.au",
+      "portfolio_url": "https://thirdvisual.com.au/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "australian_residential",
+        "coastal_penthouses",
+        "lifestyle_cg"
+      ],
+      "signature_style": "Bright golden Australian coastal light, warm sandstone, modern luxury apartment terraces"
+    },
+    {
+      "id": "stab-studio",
+      "name": "Stab Studio",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Australia",
+      "website": "https://stabstudio.com",
+      "portfolio_url": "https://stabstudio.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "atmospheric_residences",
+        "bushland_houses",
+        "natural_textures"
+      ],
+      "signature_style": "Moody Australian bush landscapes, charred timber and concrete villas, natural light"
+    },
+    {
+      "id": "pixelcraft",
+      "name": "Pixelcraft",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "New Zealand",
+      "website": "https://pixelcraft.co.nz",
+      "portfolio_url": "https://pixelcraft.co.nz/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "new_zealand_coastal",
+        "mountain_lodges",
+        "crisp_realism"
+      ],
+      "signature_style": "Dramatic alpine and coastal scenery, crisp mountain daylight, authentic natural foliage"
+    },
+    {
+      "id": "omega-render",
+      "name": "Omega Render",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Global / USA",
+      "website": "https://omegarender.com",
+      "portfolio_url": "https://omegarender.com/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "commercial_villas",
+        "large_scale_developments",
+        "top_tier_volume"
+      ],
+      "signature_style": "Consistently clean, hyper-realistic, high-impact commercial and residential visuals"
+    },
+    {
+      "id": "hard-engine",
+      "name": "Hard Engine",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Russia / Global",
+      "website": "https://hardengine.pro",
+      "portfolio_url": "https://hardengine.pro",
+      "archdaily_url": "",
+      "specialties": [
+        "hyper_detailed_cgi",
+        "complex_shaders",
+        "modern_architecture"
+      ],
+      "signature_style": "Extreme attention to micro-textures, physical light simulation, immaculate botanical detail"
+    },
+    {
+      "id": "bart-visuals",
+      "name": "Bart Visuals",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Europe",
+      "website": "https://bartvisuals.com",
+      "portfolio_url": "https://bartvisuals.com",
+      "archdaily_url": "",
+      "specialties": [
+        "luxury_villas",
+        "monolithic_concrete",
+        "warm_mood"
+      ],
+      "signature_style": "Soft twilight tones, high-end private residences, realistic wood and stone shaders"
+    },
+    {
+      "id": "squint-opera",
+      "name": "Squint/Opera",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://squintopera.com",
+      "portfolio_url": "https://squintopera.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "digital_narrative",
+        "immersive_visuals",
+        "civic_masterplans"
+      ],
+      "signature_style": "Cinematic visual storytelling, rich human entourage, dynamic urban and architectural atmosphere"
+    },
+    {
+      "id": "factory-fifteen",
+      "name": "Factory Fifteen",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://factoryfifteen.com",
+      "portfolio_url": "https://factoryfifteen.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "speculative_architecture",
+        "cinematography",
+        "animation"
+      ],
+      "signature_style": "Sci-fi and speculative narrative, complex lighting setups, boundary-pushing visual arts"
+    },
+    {
+      "id": "kilograph",
+      "name": "Kilograph",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://kilograph.com",
+      "portfolio_url": "https://kilograph.com/work",
+      "archdaily_url": "",
+      "specialties": [
+        "creative_real_estate",
+        "high_rise_and_villa",
+        "cutting_edge"
+      ],
+      "signature_style": "California cool, vibrant light, innovative artistic direction and interior fidelity"
+    },
+    {
+      "id": "steelman-partners",
+      "name": "Steelman Partners 3D",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "USA",
+      "website": "https://steelmanpartners.com",
+      "portfolio_url": "https://steelmanpartners.com",
+      "archdaily_url": "",
+      "specialties": [
+        "resorts",
+        "hospitality_lighting",
+        "mega_complexes"
+      ],
+      "signature_style": "Lush resort lighting, dramatic water features, opulent luxury materials"
+    },
+    {
+      "id": "k-render",
+      "name": "K-Render",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Vietnam",
+      "website": "https://k-render.com",
+      "portfolio_url": "https://k-render.com/portfolio",
+      "archdaily_url": "",
+      "specialties": [
+        "high_detail_residential",
+        "tropical_exteriors",
+        "asian_projects"
+      ],
+      "signature_style": "Crisp sunny exterior renders, tropical foliage rendering, modern residential developments"
+    },
+    {
+      "id": "two-g-studio",
+      "name": "2G Studio",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Indonesia",
+      "website": "https://2g-studio.com",
+      "portfolio_url": "https://2g-studio.com",
+      "archdaily_url": "",
+      "specialties": [
+        "photorealistic_villas",
+        "unreal_engine_and_corona",
+        "luxury_escapes"
+      ],
+      "signature_style": "High-end Bali and global villas, seamless water and stone reflections, tropical dusk mood"
+    },
+    {
+      "id": "shao-san",
+      "name": "韶 (SAN)",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "China / Global",
+      "website": "https://san.sg",
+      "portfolio_url": "https://san.sg",
+      "archdaily_url": "",
+      "specialties": [
+        "asian_minimalism",
+        "contemplative_spaces",
+        "stone_and_bamboo"
+      ],
+      "signature_style": "Serene poetic atmosphere, subtle misty grey and beige palettes, quiet contemplative visual art"
+    },
+    {
+      "id": "frontop",
+      "name": "Frontop",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "China",
+      "website": "https://frontop.com",
+      "portfolio_url": "https://frontop.com",
+      "archdaily_url": "",
+      "specialties": [
+        "mega_scale_exterior",
+        "urban_towers",
+        "cultural_centers"
+      ],
+      "signature_style": "Massive urban scenes, glittering night lighting, expansive scale and dramatic perspective"
+    },
+    {
+      "id": "flying-architecture",
+      "name": "FlyingArchitecture",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Slovakia",
+      "website": "https://flyingarchitecture.com",
+      "portfolio_url": "https://flyingarchitecture.com",
+      "archdaily_url": "",
+      "specialties": [
+        "clean_rhino_vray",
+        "modern_villas",
+        "educational_mastery"
+      ],
+      "signature_style": "Pristine European modernist villa rendering, clear daylighting, exact shader setups"
+    },
+    {
+      "id": "pixel-head",
+      "name": "Pixel-Head Studios",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "South Africa",
+      "website": "https://pixelhead.co.za",
+      "portfolio_url": "https://pixelhead.co.za",
+      "archdaily_url": "",
+      "specialties": [
+        "safari_lodges",
+        "coastal_mansions",
+        "savanna_lighting"
+      ],
+      "signature_style": "Rich African sunset light, thatched and stone lodge rendering, dry grass and acacia foliage"
+    },
+    {
+      "id": "chaos-master-showcase",
+      "name": "Chaos Group Master Artists",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Global",
+      "website": "https://chaos.com",
+      "portfolio_url": "https://chaos.com/gallery",
+      "archdaily_url": "",
+      "specialties": [
+        "corona_vray_benchmarks",
+        "hall_of_fame_cgi",
+        "top_cgarchitect"
+      ],
+      "signature_style": "Officially curated benchmark renders selected by developers of Corona and V-Ray as peaks of photorealism"
+    },
+    {
+      "id": "prompt-collective",
+      "name": "Prompt Visual Collective",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Global",
+      "website": "https://promptstudio.ai",
+      "portfolio_url": "https://promptstudio.ai",
+      "archdaily_url": "",
+      "specialties": [
+        "ai_enhanced_archviz",
+        "hybrid_render",
+        "cinematic_architectural_art"
+      ],
+      "signature_style": "Next-generation hybrid workflow combining raytraced 3D bases with high-fidelity latent diffusion enhancement"
+    }
+  ]
+}

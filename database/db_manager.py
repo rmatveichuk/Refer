@@ -226,11 +226,25 @@ class DatabaseManager:
         ]
         
         if not selected_tags and not search_text:
-            # Root level: Prefer main categories
-            # We can hardcode priority for 'exterior' and 'interior'
+            # Root level: Prefer main categories and curated benchmarks
+            priority = ['топ', 'top', 'exterior', 'interior', 'architecture', 'render', 'furniture']
+            
+            # Explicitly fetch priority tag counts if they exist in DB
+            priority_tags = {}
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                p_placeholders = ','.join('?' for _ in priority)
+                cur.execute(f"""
+                    SELECT t.name, COUNT(at.asset_id) as cnt
+                    FROM tags t
+                    JOIN asset_tags at ON t.id = at.tag_id
+                    WHERE t.name IN ({p_placeholders})
+                    GROUP BY t.id
+                """, priority)
+                priority_tags = {row['name']: row['cnt'] for row in cur.fetchall()}
+
             all_tags = self.get_all_tags(limit=limit * 2)
-            # Sort so exterior/interior are first if they exist
-            priority = ['exterior', 'interior', 'architecture', 'render', 'furniture']
+            all_tags.update(priority_tags)
             
             # Filter out blacklisted tags
             filtered_tags = {k: v for k, v in all_tags.items() if k not in generic_blacklist}
@@ -329,6 +343,14 @@ class DatabaseManager:
                     WHERE a.id NOT IN (SELECT asset_id FROM asset_tags)
                 """)
             return [row['id'] for row in cur.fetchall()]
+
+    def reset_all_embeddings(self) -> int:
+        """Resets all embedding_id to NULL so assets can be re-indexed with a new model."""
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE assets SET embedding_id = NULL")
+            conn.commit()
+            return cur.rowcount
 
     def set_embedding_id(self, asset_id: int, embedding_id: int):
         """Associates a FAISS embedding ID with an asset."""

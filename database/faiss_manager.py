@@ -30,6 +30,13 @@ class FaissManager:
         logger.info(f"Created new FAISS index (dimension={self.dimension}).")
         return index
 
+    def reset_index(self):
+        """Clears the FAISS index and saves an empty index to disk."""
+        quantizer = faiss.IndexFlatL2(self.dimension)
+        self.index = faiss.IndexIDMap(quantizer)
+        self.save_index()
+        logger.info(f"Reset FAISS index (dimension={self.dimension}).")
+
     def save_index(self):
         """Saves current index state to disk."""
         faiss.write_index(self.index, str(self.index_path))

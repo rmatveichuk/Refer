@@ -43,7 +43,6 @@ class ModelDownloader(threading.Thread):
             snapshot_download(
                 repo_id=self.model_id,
                 local_dir=str(self.cache_dir / self.model_id.replace("/", "--")),
-                local_dir_use_symlinks=False
             )
             self.signals.finished.emit(True, "Модель успешно загружена")
         except Exception as e:
@@ -127,17 +126,14 @@ class SetupWizard(QDialog):
         self.layout.addWidget(self.stack)
 
     def check_initial_state(self):
-        # Check if model exists
-        # A simple check: does the directory exist and have some files?
         model_exists = False
         local_model_dir = config.MODELS_DIR / config.SIGLIP_MODEL.replace("/", "--")
+        hf_cache_dir = config.MODELS_DIR / f"models--{config.SIGLIP_MODEL.replace('/', '--')}"
         
         if local_model_dir.exists() and any(local_model_dir.iterdir()):
             model_exists = True
-        elif config.MODELS_DIR.exists():
-            # Fallback check for the old huggingface cache structure
-            if any(config.MODELS_DIR.glob("models--*")):
-                model_exists = True
+        elif hf_cache_dir.exists() and any(hf_cache_dir.iterdir()):
+            model_exists = True
         
         if model_exists:
             self.go_to_step2()

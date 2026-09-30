@@ -1,0 +1,156 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-09-30",
+  "studios": [
+    {
+      "id": "mir",
+      "name": "Mir",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Norway",
+      "website": "https://www.mir.no",
+      "portfolio_urls": [
+        "https://www.mir.no"
+      ],
+      "specialties": ["conceptual_cinematic", "unbuilt_architecture", "landscape", "atmospheric_mood"],
+      "signature_style": "Dramatic natural lighting, Nordic overcast, subtle imperfection, filmic grain, poetic narrative, anti-generic CGI",
+      "benchmark_score": 10.0,
+      "notes": "Absolute gold standard for natural light and emotional storytelling in ArchViz."
+    },
+    {
+      "id": "the-boundary",
+      "name": "The Boundary",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "United Kingdom",
+      "website": "https://www.the-boundary.com",
+      "portfolio_urls": [
+        "https://www.the-boundary.com/projects"
+      ],
+      "specialties": ["luxury_residential", "hospitality", "interiors", "exteriors", "realism"],
+      "signature_style": "Flawless material shaders, physically accurate light bounce, hyper-realistic foliage, architectural photography fidelity",
+      "benchmark_score": 9.9,
+      "notes": "Co-founded by Peter Guthrie. Benchmark for materials, lighting balance, and natural vegetation scattering."
+    },
+    {
+      "id": "luxigon",
+      "name": "Luxigon",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "France",
+      "website": "https://www.luxigon.com",
+      "portfolio_urls": [
+        "https://www.luxigon.com"
+      ],
+      "specialties": ["competition_renders", "urban_scale", "dramatic_lighting", "artistic_direction"],
+      "signature_style": "High contrast, bold color palettes, atmospheric post-production, dynamic human scale figures",
+      "benchmark_score": 9.7,
+      "notes": "Legendary French studio favored by OMA, REX, MVRDV for high-impact competition entries."
+    },
+    {
+      "id": "brick-visual",
+      "name": "Brick Visual",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Hungary",
+      "website": "https://brickvisual.com",
+      "portfolio_urls": [
+        "https://brickvisual.com/works"
+      ],
+      "specialties": ["large_scale_developments", "cultural_centers", "masterplans", "fine_art_composition"],
+      "signature_style": "Classical art composition, painterly harmony, controlled atmospheric depth, premium commercial grade",
+      "benchmark_score": 9.6,
+      "notes": "Strong focus on classical painting composition rules applied to 3D visualization."
+    },
+    {
+      "id": "binyan-studios",
+      "name": "Binyan Studios",
+      "type": "archviz",
+      "tier": "tier_1",
+      "country": "Australia / USA",
+      "website": "https://binyanstudios.com",
+      "portfolio_urls": [
+        "https://binyanstudios.com/work"
+      ],
+      "specialties": ["high_end_residential", "towers", "resorts", "warm_evening_mood"],
+      "signature_style": "Warm golden hour, luxurious lifestyle mood, sophisticated interior lighting, warm Mediterranean & Californian feel",
+      "benchmark_score": 9.5,
+      "notes": "World leader in luxury residential marketing and warm-lit architecture."
+    },
+    {
+      "id": "saota",
+      "name": "SAOTA",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "South Africa",
+      "website": "https://www.saota.com",
+      "portfolio_urls": [
+        "https://www.saota.com/projects"
+      ],
+      "specialties": ["luxury_villas", "cliffside_houses", "cantilevers", "indoor_outdoor_flow"],
+      "signature_style": "Massive concrete cantilevers, panoramic glazing, seamless pools, warm natural wood louvers, dramatic hillsides",
+      "benchmark_score": 9.8,
+      "notes": "Global master of modern hillside luxury villas with outstanding architectural photography and CGI."
+    },
+    {
+      "id": "studio-mk27",
+      "name": "Studio MK27 (Marcio Kogan)",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Brazil",
+      "website": "https://studiomk27.com.br",
+      "portfolio_urls": [
+        "https://studiomk27.com.br/projects"
+      ],
+      "specialties": ["tropical_modernism", "horizontal_proportions", "timber_slats", "raw_concrete"],
+      "signature_style": "Clean horizontal lines, raw board-formed concrete, wooden pivoting panels, soft warm ambient lighting, lush tropical landscape",
+      "benchmark_score": 9.9,
+      "notes": "Pure elegance in proportions and material honesty. Essential reference for private residential architecture."
+    },
+    {
+      "id": "k-studio",
+      "name": "K-Studio",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Greece",
+      "website": "https://k-studio.gr",
+      "portfolio_urls": [
+        "https://www.k-studio.gr/projects"
+      ],
+      "specialties": ["mediterranean_villas", "local_stone", "pergolas", "summer_houses", "earthy_tones"],
+      "signature_style": "Dry-stone walls, timber canopies, woven reed pergolas, terracotta, olive trees, seamless blend with arid topography",
+      "benchmark_score": 9.8,
+      "notes": "Top reference for modern Mediterranean architecture, stone crafts, and integrated natural landscape."
+    },
+    {
+      "id": "vincent-van-duysen",
+      "name": "Vincent Van Duysen Architects",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Belgium",
+      "website": "https://vincentvanduysen.com",
+      "portfolio_urls": [
+        "https://vincentvanduysen.com/architecture"
+      ],
+      "specialties": ["warm_minimalism", "monolithic_forms", "natural_stone", "tactile_materials"],
+      "signature_style": "Quiet luxury, bone/sand limestone, bleached oak, deep recessed openings, subtle interplay of shadow and texture",
+      "benchmark_score": 9.7,
+      "notes": "Master of warm minimalist interiors and monolithic exteriors."
+    },
+    {
+      "id": "fran-silvestre",
+      "name": "Fran Silvestre Arquitectos",
+      "type": "architecture",
+      "tier": "tier_1",
+      "country": "Spain",
+      "website": "https://fransilvestrearquitectos.com",
+      "portfolio_urls": [
+        "https://fransilvestrearquitectos.com/proyectos"
+      ],
+      "specialties": ["sculptural_minimalism", "white_forms", "cliffside_houses", "pools"],
+      "signature_style": "Ultra-crisp white curved monoliths, sharp shadows, deep blue skies and water reflections, Mediterranean purity",
+      "benchmark_score": 9.5,
+      "notes": "Purity of form and intense Mediterranean light-and-shadow play."
+    }
+  ]
+}

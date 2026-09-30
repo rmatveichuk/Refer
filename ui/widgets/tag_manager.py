@@ -46,7 +46,7 @@ class TagManagerDialog(QDialog):
         # Search input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(tr("tag_input_placeholder"))
-        self.search_input.textChanged.connect(self._filter_tags)
+        self.search_input.textChanged.connect(self._on_search_text_changed)
         self.search_input.returnPressed.connect(self._add_custom_tag)
         layout.addWidget(self.search_input)
 
@@ -93,6 +93,15 @@ class TagManagerDialog(QDialog):
         btn_layout.addWidget(self.btn_cancel)
         btn_layout.addWidget(self.btn_apply)
         layout.addLayout(btn_layout)
+
+    def _on_search_text_changed(self, text: str):
+        search_text = text.strip()
+        self.available_tags = self.db.get_contextual_suggestions(
+            list(self.selected_tags),
+            search_text,
+            limit=100
+        )
+        self._filter_tags()
 
     def _load_tags(self):
         """Loads contextual tag suggestions."""

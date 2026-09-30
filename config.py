@@ -3,7 +3,7 @@ import sys
 import ctypes
 from pathlib import Path
 
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 APP_NAME = "Refer"
 OLD_APP_NAME = "ReferAssetManager"
 
@@ -90,8 +90,8 @@ THUMBNAILS_DIR = APP_LOCAL_DIR / "Thumbnails"
 THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
 
 # AI Settings
-SIGLIP_MODEL = "google/siglip-so400m-patch14-384"
-VECTOR_DIMENSION = 1152  # Updated for so400m model
+SIGLIP_MODEL = "google/siglip2-so400m-patch14-384"
+VECTOR_DIMENSION = 1152  # 1152 for siglip2-so400m
 
 # Hardware / Performance Constants
 THUMBNAIL_SIZE = 1024 # px
