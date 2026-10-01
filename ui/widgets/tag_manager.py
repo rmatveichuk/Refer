@@ -46,6 +46,7 @@ class TagManagerDialog(QDialog):
         # Search input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(tr("tag_input_placeholder"))
+        self.search_input.setToolTip("Найти тег в библиотеке. Нажмите на тег ниже, затем «Применить».")
         self.search_input.textChanged.connect(self._on_search_text_changed)
         self.search_input.returnPressed.connect(self._add_custom_tag)
         layout.addWidget(self.search_input)
@@ -64,6 +65,10 @@ class TagManagerDialog(QDialog):
         self.scroll_area.setWidget(self.scroll_content)
         
         layout.addWidget(self.scroll_area)
+        self.empty_label = QLabel("Подходящих тегов нет. Измените запрос или снимите выбранные теги.")
+        self.empty_label.setWordWrap(True)
+        self.empty_label.hide()
+        layout.addWidget(self.empty_label)
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -142,6 +147,7 @@ class TagManagerDialog(QDialog):
             if widget:
                 widget.deleteLater()
 
+        visible_count = 0
         for tag, count in self.available_tags.items():
             if tag in self.selected_tags:
                 continue
@@ -149,6 +155,8 @@ class TagManagerDialog(QDialog):
             chip = TagChip(tag, count=count)
             chip.clicked_tag.connect(lambda t: self._add_tag(t))
             self.suggestions_layout.addWidget(chip)
+            visible_count += 1
+        self.empty_label.setVisible(visible_count == 0)
 
     def _add_tag(self, tag):
         self.selected_tags.add(tag)

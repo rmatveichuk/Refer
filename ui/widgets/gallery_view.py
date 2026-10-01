@@ -41,7 +41,7 @@ class GalleryDelegate(QStyledItemDelegate):
         if isinstance(pixmap, QPixmap) and not pixmap.isNull():
             scaled = pixmap.scaled(
                 cell.size(),
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
             # Clip path for rounded corners
@@ -113,7 +113,9 @@ class GalleryView(QListView):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool = QThreadPool(self)
+        self.thread_pool.setMaxThreadCount(4)
+        self.verticalScrollBar().valueChanged.connect(lambda _value: self._retry_thumbnails())
 
         # Flow layout mode
         self.setViewMode(QListView.ViewMode.IconMode)
@@ -154,8 +156,9 @@ class GalleryView(QListView):
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
         """)
 
-        # Single-click -> open full-size viewer
+        # Plain click opens; Ctrl/Shift retain normal multiple selection.
         self.clicked.connect(self._on_item_clicked)
+        self.setToolTip("Клик — рассмотреть изображение; Ctrl/Shift + клик — выделить несколько; пробел — открыть")
         
         # Right-click context menu
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -168,32 +171,50 @@ class GalleryView(QListView):
     def setModel(self, model: AssetListModel):
         old_model = self.model()
         if old_model and isinstance(old_model, AssetListModel):
+            old_model.cancel_loads()
             old_model.loadRequested.disconnect(self._on_load_requested)
+            old_model.loadCapacityAvailable.disconnect(self.viewport().update)
             
         super().setModel(model)
         model.loadRequested.connect(self._on_load_requested)
+        model.loadCapacityAvailable.connect(self.viewport().update)
 
-    @pyqtSlot(int, str)
-    def _on_load_requested(self, asset_id: int, file_path: str):
-        worker = ImageLoaderWorker(asset_id, file_path)
-        worker.signals.loaded.connect(self._on_image_loaded)
-        worker.signals.error.connect(self._on_image_error)
+    @pyqtSlot(int, str, int)
+    def _on_load_requested(self, asset_id: int, file_path: str, generation: int):
+        worker = ImageLoaderWorker(asset_id, file_path, generation=generation,
+                                   cancellation=self.model().cancellation_for(generation))
+        worker.signals.completed.connect(self._on_image_completed)
         self.thread_pool.start(worker)
 
-    @pyqtSlot(int, QImage)
-    def _on_image_loaded(self, asset_id: int, image: QImage):
-        pixmap = QPixmap.fromImage(image)
+    @pyqtSlot(int, int, QImage, str)
+    def _on_image_completed(self, asset_id: int, generation: int, image: QImage, error: str):
         model = self.model()
         if isinstance(model, AssetListModel):
-            model.setImage(asset_id, pixmap)
+            model.completeImage(asset_id, generation, QPixmap.fromImage(image) if not image.isNull() else None)
+        if error:
+            logger.warning("Asset %s thumbnail: %s", asset_id, error)
 
-    @pyqtSlot(int, str)
-    def _on_image_error(self, asset_id: int, error_msg: str):
-        logger.error(f"Asset {asset_id} image load failure: {error_msg}")
+    def _retry_thumbnails(self):
+        model = self.model()
+        if isinstance(model, AssetListModel):
+            model.retry_evicted()
+
+    def resizeEvent(self, event):
+        self._retry_thumbnails()
+        super().resizeEvent(event)
+
+    def paintEvent(self, event):
+        model = self.model()
+        if isinstance(model, AssetListModel):
+            viewport = self.viewport().rect()
+            visible = [asset.id for row, asset in enumerate(model.assets)
+                       if self.visualRect(model.index(row, 0)).intersects(viewport)]
+            model.set_visible_assets(visible)
+        super().paintEvent(event)
 
     @pyqtSlot(QModelIndex)
     def _on_item_clicked(self, index: QModelIndex):
-        """Открыть полноэкранный просмотрщик при клике, если не зажаты Shift/Ctrl."""
+        """Open the viewer from a plain click, Space or the context menu."""
         if not index.isValid():
             return
 
@@ -217,6 +238,19 @@ class GalleryView(QListView):
         self._viewer_window.show()
         self._viewer_window.raise_()
         self._viewer_window.activateWindow()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and self.currentIndex().isValid():
+            self._on_item_clicked(self.currentIndex())
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def set_thumbnail_size(self, size):
+        self._retry_thumbnails()
+        self.setGridSize(QSize(size, size))
+        self.setIconSize(QSize(size - 16, size - 16))
+        self.viewport().update()
 
     def _on_context_menu(self, pos):
         index = self.indexAt(pos)
@@ -257,20 +291,39 @@ class GalleryView(QListView):
 
             menu.addSeparator()
             
-            delete_action = menu.addAction(f"🗑️ Удалить ({len(selected_assets)})")
+            delete_action = menu.addAction(f"Скрыть из библиотеки ({len(selected_assets)})")
             delete_action.triggered.connect(lambda: self._delete_assets(selected_assets))
         else:
             asset = model.assets[index.row()]
+
+            view_action = menu.addAction("Рассмотреть изображение")
+            view_action.triggered.connect(lambda: self._on_item_clicked(index))
+            favorite_action = menu.addAction("Убрать из избранного" if asset.is_favorite else "В избранное")
+            favorite_action.triggered.connect(lambda: self._toggle_favorite(asset))
+            if asset.local_path or asset.thumbnail_path:
+                folder_action = menu.addAction("Открыть папку изображения")
+                folder_action.triggered.connect(lambda: self._open_image_folder(asset))
+            menu.addSeparator()
             
             ai_action = menu.addAction("🤖 ИИ-анализ (LM Studio)")
             ai_action.triggered.connect(lambda: self._batch_ai_analyze([asset]))
             
             menu.addSeparator()
             
-            delete_action = menu.addAction("🗑️ Удалить")
+            delete_action = menu.addAction("Скрыть из библиотеки")
             delete_action.triggered.connect(lambda: self._delete_asset(asset))
         
         menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _open_image_folder(self, asset):
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        path = asset.local_path or asset.thumbnail_path
+        folder = os.path.dirname(os.path.abspath(path)) if path else ""
+        if not folder or not os.path.isdir(folder):
+            QMessageBox.information(self, "Папка недоступна", "Проверьте подключение диска и расположение изображения.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _toggle_favorite(self, asset):
         if not self.db: return
@@ -297,28 +350,4 @@ class GalleryView(QListView):
         if self.parent_window and hasattr(self.parent_window, "start_batch_ai_analysis"):
             self.parent_window.start_batch_ai_analysis(assets)
         else:
-            # Fallback если нет главного окна (упрощенное удаление)
-            reply = QMessageBox.question(
-                self, "Удалить ассет",
-                f"Удалить ассет #{asset.id}?\n\nЭто действие необратимо.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                if asset.original_url:
-                    self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
-                
-                # Удаляем файл только для веба
-                if asset.image_type != "Local":
-                    if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
-                        try: os.remove(asset.thumbnail_path)
-                        except Exception: pass
-                
-                with self.db.get_connection() as conn:
-                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset.id,))
-                    conn.execute("DELETE FROM assets WHERE id = ?", (asset.id,))
-                    conn.commit()
-                
-                if self.parent_window:
-                    self.parent_window._load_assets_for_gallery()
-                    self.parent_window._refresh_library()
+            QMessageBox.information(self, "Анализ недоступен", "Откройте изображения в основном окне приложения.")

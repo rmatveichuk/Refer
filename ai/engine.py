@@ -3,8 +3,6 @@ import torch
 import numpy as np
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
-import argostranslate.package
-import argostranslate.translate
 import config
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -59,66 +57,41 @@ class AiEngine:
         # Для параллельной загрузки картинок
         self.executor = ThreadPoolExecutor(max_workers=8)
         
-        # Initialize Translation (RU -> EN)
-        self._init_translator()
+    @property
+    def text_token_limit(self) -> int:
+        return self.model.config.text_config.max_position_embeddings
 
-    def _init_translator(self):
-        """Автоматическая загрузка пакетов перевода при первом запуске."""
-        from_code = "ru"
-        to_code = "en"
-        
-        try:
-            # Проверяем, установлен ли пакет
-            installed_languages = argostranslate.translate.get_installed_languages()
-            from_lang = list(filter(lambda x: x.code == from_code, installed_languages))
-            to_lang = list(filter(lambda x: x.code == to_code, installed_languages))
-            
-            if not from_lang or not to_lang or not from_lang[0].get_translation(to_lang[0]):
-                logger.info("Downloading translation packages (RU -> EN)...")
-                argostranslate.package.update_package_index()
-                available_packages = argostranslate.package.get_available_packages()
-                package_to_install = next(
-                    filter(
-                        lambda x: x.from_code == from_code and x.to_code == to_code,
-                        available_packages
-                    )
-                )
-                argostranslate.package.install_from_path(package_to_install.download())
-                logger.info("Translation packages installed successfully.")
-            
-            self.translator = argostranslate.translate
-        except Exception as e:
-            logger.error(f"Failed to initialize translator: {e}")
-            self.translator = None
-
-    def translate_ru_to_en(self, text: str) -> str:
-        """Переводит русский текст на английский для лучшего поиска."""
-        if not self.translator or not any(c in text for c in "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"):
-            return text
-        
-        try:
-            translated = self.translator.translate(text, "ru", "en")
-            logger.info(f"Translated: '{text}' -> '{translated}'")
-            return translated
-        except Exception as e:
-            logger.error(f"Translation failed: {e}")
-            return text
+    def get_text_query_info(self, text: str) -> dict:
+        """Counts the actual tokenizer tokens, including EOS, without inference."""
+        tokenizer = self.processor.tokenizer
+        ids = tokenizer(text)["input_ids"]
+        effective = tokenizer(text, truncation=True, max_length=self.text_token_limit)["input_ids"]
+        return {"token_count": len(ids), "token_limit": self.text_token_limit,
+                "truncated": len(ids) > self.text_token_limit,
+                "effective_text": tokenizer.decode(effective, skip_special_tokens=True)}
 
     def get_text_embedding(self, text: str) -> np.ndarray:
-        """Генерирует вектор для текста (с автопереводом)."""
-        english_text = self.translate_ru_to_en(text)
+        """Embeds the original multilingual query; failures never become vectors."""
+        text = text.strip()
+        if not text:
+            raise ValueError("Введите текст поискового запроса.")
         try:
-            inputs = self.processor(text=[english_text], return_tensors="pt", padding="max_length", max_length=64).to(self.device)
+            inputs = self.processor(text=[text], return_tensors="pt", padding="max_length",
+                                    truncation=True, max_length=self.text_token_limit).to(self.device)
             with torch.no_grad():
-                with torch.amp.autocast('cuda', dtype=self.dtype):
+                with torch.amp.autocast('cuda', enabled=(self.device == 'cuda'), dtype=self.dtype):
                     text_features = self.model.get_text_features(**inputs)
             
             # Normalize and convert to numpy
+            text_features = text_features.float()
             text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
-            return text_features.cpu().float().numpy().flatten()
+            vector = text_features.cpu().numpy().flatten()
+            if not np.isfinite(vector).all() or not np.any(vector):
+                raise ValueError("Модель вернула некорректный вектор текста.")
+            return vector
         except Exception as e:
             logger.error(f"Failed to embed text: {e}")
-            return np.zeros(config.VECTOR_DIMENSION)
+            raise RuntimeError("Не удалось обработать текст поискового запроса.") from e
 
     def get_image_embedding(self, image_path: str) -> np.ndarray:
         """Генерирует вектор для одного изображения."""
@@ -136,7 +109,7 @@ class AiEngine:
             return image_features.cpu().float().numpy().flatten()
         except Exception as e:
             logger.error(f"Failed to embed image {image_path}: {e}")
-            return np.zeros(config.VECTOR_DIMENSION)
+            raise RuntimeError("Не удалось обработать изображение. Проверьте доступность файла.") from e
 
     def get_image_embeddings_batch(self, image_paths: list[str]) -> np.ndarray:
         """Генерирует векторы для списка изображений (батчинг с параллельной загрузкой)."""

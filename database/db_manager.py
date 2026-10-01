@@ -378,59 +378,14 @@ class DatabaseManager:
             """)
             return [row['id'] for row in cur.fetchall()]
 
+    def check_file_availability(self):
+        """Read-only diagnostics; unavailable sources never imply deletion."""
+        from database.availability import inspect_files
+        return inspect_files(self)
+
     def cleanup_missing_files(self) -> tuple:
-        """Удаляет записи ассетов, у которых нет локального файла на диске.
-
-        Returns:
-            (deleted_count, deleted_ids) — количество удалённых и список их ID
-        """
-        deleted_ids = []
-        deleted_count = 0
-
-        with self.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT id, local_path, thumbnail_path, image_type FROM assets")
-            rows = cur.fetchall()
-
-            import os
-            for row in rows:
-                asset_id = row['id']
-                local_path = row['local_path']
-                thumb_path = row['thumbnail_path']
-                img_type = row['image_type'] or 'Photography'
-
-                is_missing = False
-                # Для локальных файлов проверяем оригинал
-                if img_type == "Local" and local_path:
-                    # Используем os.path.exists, он работает значительно быстрее Path().exists() в циклах
-                    if not os.path.exists(local_path):
-                        is_missing = True
-                # Для веб-файлов или если нет локального пути, проверяем превью в кэше
-                elif thumb_path:
-                    if not os.path.exists(thumb_path):
-                        is_missing = True
-                elif local_path: # fallback
-                    if not os.path.exists(local_path):
-                        is_missing = True
-
-                if is_missing:
-                    deleted_ids.append(asset_id)
-                    # Удаляем связанные теги
-                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (asset_id,))
-                    # Удаляем ассет
-                    conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
-                    deleted_count += 1
-
-            conn.commit()
-
-        # Чистим неиспользуемые теги
-        if deleted_count > 0:
-            with self.get_connection() as conn:
-                conn.execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM asset_tags)")
-                conn.commit()
-
-        logger.info(f"Cleanup: deleted {deleted_count} assets with missing files")
-        return deleted_count, deleted_ids
+        """Legacy destructive cleanup is disabled; callers must inspect first."""
+        raise RuntimeError("Автоматическое удаление недоступных файлов отключено. Используйте check_file_availability().")
 
     # === Favorite operations ===
 

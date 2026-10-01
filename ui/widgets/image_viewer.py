@@ -36,6 +36,10 @@ class ZoomableImageView(QGraphicsView):
         self._is_first_fit = True
         self.fit_in_view()
 
+    def clear_image(self):
+        self._scene.clear()
+        self._pixmap_item = None
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         # If we haven't manually zoomed or if it's the initial display, keep fitting to window
@@ -183,7 +187,7 @@ class ImageViewerWindow(QMainWindow):
         self.btn_ai.clicked.connect(self._trigger_ai_analysis)
         toolbar.addWidget(self.btn_ai)
 
-        self.btn_delete = QPushButton("🗑 Удалить")
+        self.btn_delete = QPushButton("Скрыть из библиотеки")
         self.btn_delete.setStyleSheet("""
             QPushButton:hover { background-color: #a83232; color: white; border-color: #cc4444; }
         """)
@@ -225,33 +229,32 @@ class ImageViewerWindow(QMainWindow):
             return
 
         asset = self.assets[self.current_index]
-        thumb_path = asset.thumbnail_path
+        origin = asset.original_url or asset.local_path or asset.thumbnail_path or ""
 
         # Обновляем статус
         cat_label = "📸 Photo" if asset.category == "photography" else "🏛 3D Render"
         self.status.showMessage(
-            f"{cat_label}  |  {asset.width}×{asset.height}  |  {asset.original_url[:100]}...",
+            f"{cat_label}  |  {asset.width}×{asset.height}  |  {origin[:100]}",
             0
         )
-        self.setWindowTitle(f"Refer — {asset.original_url.split('/')[-1]}  ({self.current_index + 1}/{len(self.assets)})")
+        self.setWindowTitle(f"Refer — {origin.split('/')[-1]}  ({self.current_index + 1}/{len(self.assets)})")
 
         self._update_ui_state()
 
         import os
-        # Нормализуем путь
-        path = thumb_path
-        if path.startswith('file:///'):
-            path = path[8:]
-        path = os.path.normpath(path)
-
-        # Загружаем полное изображение
+        from database.availability import file_path
         from PyQt6.QtGui import QImage
-        image = QImage(path)
-        if not image.isNull():
-            pixmap = QPixmap.fromImage(image)
-            self.viewer.set_pixmap(pixmap)
-        else:
-            logger.warning(f"Cannot load full image: {path}")
+        self.viewer.clear_image()
+        for value in dict.fromkeys([asset.local_path, asset.thumbnail_path]):
+            path = file_path(value)
+            if not path:
+                continue
+            path = os.path.normpath(path)
+            image = QImage(path)
+            if not image.isNull():
+                self.viewer.set_pixmap(QPixmap.fromImage(image))
+                return
+        self.status.showMessage("Изображение недоступно. Подключите источник или проверьте путь к файлу.")
 
     def show_prev(self):
         if self.current_index > 0:

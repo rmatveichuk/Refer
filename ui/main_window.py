@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QVBoxLayout, QDialog, QHBoxLayout, QWidget, QMessageBox, QPushButton, 
     QLabel, QProgressBar, QTabWidget, QTableView, QHeaderView, 
-    QAbstractItemView, QMenu, QApplication
+    QAbstractItemView, QMenu, QApplication, QSlider, QToolButton
 )
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSlot, QTimer, QRunnable, QObject, pyqtSignal
 from PyQt6.QtGui import QAction
@@ -10,17 +10,24 @@ from ui.widgets.gallery_view import GalleryView
 from ui.widgets.lazy_model import AssetListModel
 from ui.widgets.top_toolbar import TopToolbar
 from ui.widgets.search_panel import SearchPanel
+from database.search_repository import SearchRepository, SearchFilters
+from ui.workers.search_worker import SearchWorker, embedding_key
+from ui.workers.results_worker import ResultsWorker
 from ui.widgets.tag_manager import TagManagerDialog
 from ui.widgets.tag_chip import TagChip
 from ui.widgets.flow_layout import FlowLayout
 from database.db_manager import DatabaseManager
 from database.models import Asset
+from database.visibility_store import VisibilityStore
+from database.source_group_store import SourceGroupStore
+from ui.hidden_assets_dialog import HiddenAssetsDialog
 from scrapers.manager import ScraperManager
 from scrapers.behance_parser import BehanceParser
 from scrapers.archdaily_parser import ArchDailyParser
 from scrapers.local_folder import LocalFolderParser
 from database.faiss_manager import FaissManager
 from ui.settings_dialog import SettingsDialog
+from ui.catalog_dialog import CatalogDialog, FolderImportDialog
 from PyQt6.QtWidgets import QFileDialog
 import config
 from ui.translations import tr
@@ -37,9 +44,27 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Refer — AI Asset Manager")
         self.setMinimumSize(1200, 850)
-        self.setStyleSheet("background-color: #121212;")
+        self.setStyleSheet("""
+            QWidget { background-color: #121212; color: #e0e0e0; }
+            QPushButton { background-color: #282828; color: #e0e0e0;
+                          border: 1px solid #3b3b3b; border-radius: 4px; padding: 5px 9px; }
+            QPushButton:hover { background-color: #353535; }
+            QPushButton:checked { background-color: #414141; }
+            QToolButton { background-color: #282828; color: #e0e0e0;
+                          border: 1px solid #3b3b3b; border-radius: 4px; padding: 5px 24px 5px 9px; }
+            QToolButton:hover { background-color: #353535; }
+            QToolButton::menu-button { border-left: 1px solid #444; width: 16px; }
+            QMenu { background-color: #242424; color: #e0e0e0; border: 1px solid #444; }
+            QMenu::item { padding: 7px 24px; }
+            QMenu::item:selected { background-color: #414141; }
+            QMenu::item:disabled { color: #777; }
+            QComboBox, QLineEdit { background-color: #1d1d1d; color: #e0e0e0;
+                                  border: 1px solid #393939; padding: 4px; }
+        """)
         
         self.db = DatabaseManager(config.DB_PATH)
+        self.visibility = VisibilityStore(config.APP_ROAMING_DIR / "hidden_assets.json")
+        self.group_store = SourceGroupStore(db=self.db)
         self.faiss_mgr = FaissManager(config.FAISS_PATH, dimension=config.VECTOR_DIMENSION)
         self.ai = None
         
@@ -47,7 +72,22 @@ class MainWindow(QMainWindow):
         self.active_indexer = None
         self.active_searcher = None
         self.ai_initializing = False  # Флаг для предотвращения двойной инициализации
-        self.search_threshold = 0.6
+        self._requested_search = None
+        self._embedding_cache = None
+        self.current_search_text = ""
+        self.search_tags = []
+        self.result_limit = config.SEARCH_PAGE_SIZE
+        self._query_info = {}
+        self._results_revision = 0
+        self._closing = False
+        self._active_results_worker = None
+        self._pending_results_worker = None
+        self._results_pool = QThreadPool(self)
+        self._results_pool.setMaxThreadCount(1)
+        self._ai_pool = QThreadPool(self)
+        self._ai_pool.setMaxThreadCount(1)
+        self._ai_pool.setExpiryTimeout(-1)
+        self.search_threshold = 0.0
         self.search_sources = []
         self.filter_project_id = None
         self.filter_author = None
@@ -77,37 +117,42 @@ class MainWindow(QMainWindow):
                 self.signals = InitSignals()
             def run(self):
                 try:
-                    from ai.engine import AiEngine
-                    engine = AiEngine()
+                    from ai.runtime import create_engine
+                    engine = create_engine()
                     self.signals.finished.emit(engine)
                 except Exception as e:
                     logger.error(f"Background AI init failed: {e}")
                     self.signals.error.emit(str(e))
 
-        worker = InitWorker()
-        worker.signals.finished.connect(self._on_ai_ready)
-        worker.signals.error.connect(self._on_ai_error)
-        QThreadPool.globalInstance().start(worker)
+        self._init_worker = InitWorker()
+        self._init_worker.signals.finished.connect(self._on_ai_ready)
+        self._init_worker.signals.error.connect(self._on_ai_error)
+        self._start_ai_worker(self._init_worker)
 
     @pyqtSlot(object)
     def _on_ai_ready(self, engine):
+        self._init_worker = None
+        if self._closing:
+            if hasattr(engine, 'close'):
+                engine.close()
+            return
         self.ai = engine
         self.ai_initializing = False
         self.status_label.setText("✅ AI готов")
+        self._run_requested_search()
+
+    def _start_ai_worker(self, worker):
+        self._ai_pool.start(worker)
 
     @pyqtSlot(str)
     def _on_ai_error(self, error_msg):
+        self._init_worker = None
         self.ai_initializing = False
-        self.status_label.setText("❌ Ошибка AI")
+        self.progress_bar.hide()
+        self.status_label.setText("Ошибка загрузки AI: " + error_msg)
 
     def _init_ui(self):
-        # Структура:
-        # CentralWidget (QVBoxLayout)
-        # ├── TopToolbar
-        # ├── Прямо под TopToolbar мы вставим QProgressBar для визуализации процессов
-        # └── ContentArea (QHBoxLayout)
-        #     ├── SearchPanel
-        #     └── Tabs (Gallery / Library)
+        # Search and library controls share the sidebar; results occupy the right.
         
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -120,14 +165,22 @@ class MainWindow(QMainWindow):
         self.top_toolbar.scrape_started.connect(self.start_scrape)
         self.top_toolbar.scrape_stopped.connect(self.stop_scrape)
         self.top_toolbar.add_folder_requested.connect(self._add_folder)
+        self.top_toolbar.catalogs_requested.connect(self._open_catalogs)
+        self.top_toolbar.hidden_assets_requested.connect(self._open_hidden_assets)
         self.top_toolbar.index_requested.connect(self.start_indexing)
         self.top_toolbar.cleanup_requested.connect(self._cleanup_missing_files)
         self.top_toolbar.language_changed.connect(self.retranslate_ui)
         self.top_toolbar.settings_requested.connect(self._open_settings)
         main_layout.addWidget(self.top_toolbar)
+        self.top_toolbar.show()
 
         # Выведем статус-бар и прогресс-бар в общий доступ MainWindow, для совместимости
         self.status_label = self.top_toolbar.status_label
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.status_label.setStyleSheet("color: #959b91; font-size: 11px; padding: 2px 6px;")
+        self.status_label.show()
+        self.statusBar().setSizeGripEnabled(False)
+        self.statusBar().addWidget(self.status_label, 1)
         self._settings_dialog = None
         
         self.progress_bar = QProgressBar()
@@ -148,12 +201,19 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_widget, 1)
 
         # --- Left: Search Panel ---
-        self.search_panel = SearchPanel()
+        self.search_panel = SearchPanel(db=self.db, group_store=self.group_store)
         self.search_panel.search_triggered.connect(self._update_breadcrumbs)
         self.search_panel.manage_tags_requested.connect(self._open_tag_manager)
         self.search_panel.extract_tags_requested.connect(self._extract_tags_from_image)
         self.search_panel.clear_triggered.connect(self._on_clear_search)
+        self.search_panel.filters_reset.connect(self._on_reset_filters)
         self.search_panel.remove_source_requested.connect(self._remove_source_folder)
+        self.search_panel.catalogs_requested.connect(self._open_catalogs)
+        self.filters_button = self.search_panel.filters_button
+        self.reset_filters_button = self.search_panel.reset_filters_button
+        self._setup_catalog_menu()
+        self.search_panel.btn_catalogs.setMenu(self.catalog_menu)
+        self.search_panel.btn_catalogs.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         content_layout.addWidget(self.search_panel)
 
         # --- Right: Gallery & Library Tabs ---
@@ -165,97 +225,100 @@ class MainWindow(QMainWindow):
             QTabBar::tab:selected { background: #222; color: #fff; border-bottom: 2px solid #fff; font-weight: bold; }
         """)
         
-        # --- We will add the buttons as "fake tabs" instead ---
+        # Gallery and table share one query and one set of results.
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        self.tabs.tabBarClicked.connect(self._on_tab_clicked)
         self._previous_tab_index = 0
-        content_layout.addWidget(self.tabs, 1)
+        results_widget = QWidget()
+        results_layout = QVBoxLayout(results_widget)
+        results_layout.setContentsMargins(10, 6, 10, 6)
+        results_layout.setSpacing(4)
+        heading = QHBoxLayout()
+        self.result_title = QLabel("Референсы")
+        self.result_title.setStyleSheet("font-size: 18px; color: #e4e8df;")
+        heading.addWidget(self.result_title)
+        self.result_count = QLabel()
+        self.result_count.setStyleSheet("color: #959b91;")
+        heading.addWidget(self.result_count)
+        heading.addStretch()
+        results_layout.addLayout(heading)
+        content_layout.addWidget(results_widget, 1)
 
         # --- Breadcrumbs as Corner Widget ---
         self.breadcrumbs_widget = QWidget()
-        self.breadcrumbs_layout = QHBoxLayout(self.breadcrumbs_widget)
+        self.breadcrumbs_layout = FlowLayout(self.breadcrumbs_widget)
         self.breadcrumbs_layout.setContentsMargins(10, 0, 10, 0)
-        self.breadcrumbs_layout.setSpacing(10)
-        self.tabs.setCornerWidget(self.breadcrumbs_widget, Qt.Corner.TopRightCorner)
+        self.breadcrumbs_widget.hide()
+        results_layout.addWidget(self.breadcrumbs_widget)
+        controls_widget = QWidget()
+        controls = QHBoxLayout(controls_widget)
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.addWidget(QLabel("Размер"))
+        self.thumbnail_size = QSlider(Qt.Orientation.Horizontal)
+        self.thumbnail_size.setRange(140, 320)
+        self.thumbnail_size.setValue(220)
+        self.thumbnail_size.setFixedWidth(100)
+        self.thumbnail_size.valueChanged.connect(lambda size: self.gallery.set_thumbnail_size(size))
+        controls.addWidget(self.thumbnail_size)
+        self.select_all_button = QPushButton(tr("select_all"))
+        self.select_all_button.clicked.connect(self._select_all_gallery)
+        controls.addWidget(self.select_all_button)
+        self.delete_button = QPushButton(tr("hide"))
+        self.delete_button.clicked.connect(self._delete_selected_gallery)
+        controls.addWidget(self.delete_button)
+        self.tabs.setCornerWidget(controls_widget, Qt.Corner.TopRightCorner)
+        results_layout.addWidget(self.tabs, 1)
+        self.more_button = QPushButton(f"Показать ещё {config.SEARCH_PAGE_SIZE}")
+        self.more_button.clicked.connect(self._show_more_results)
+        self.more_button.hide()
+        results_layout.addWidget(self.more_button)
 
         self._setup_gallery_tab()
         self._setup_library_tab()
         
-        # Add actions tabs in EXACT order
-        self.tabs.addTab(QWidget(), tr("favorites"))
-        self.tabs.addTab(QWidget(), tr("select_all"))
-        self.tabs.addTab(QWidget(), tr("delete"))
-        
         self.retranslate_ui()
 
-    def _on_tab_clicked(self, index):
-        tab_text = self.tabs.tabText(index)
-        if tab_text in (tr("gallery"), "Галерея", "Gallery"):
-            self.filter_project_id = None
-            self.filter_author = None
-            if hasattr(self, 'search_panel'):
-                self.search_panel.hybrid_input.text_input.clear()
-                self.search_panel.hybrid_input.clear_image()
-                if hasattr(self.search_panel, 'set_selected_tags'):
-                    self.search_panel.set_selected_tags([])
-            self._update_breadcrumbs()
-            self._load_assets_for_gallery()
-            self.status_label.setText(f"Галерея: Загружены все изображения ({len(self.gallery_model.assets)})")
+    def _setup_catalog_menu(self):
+        self.catalog_menu = QMenu(self.search_panel.btn_catalogs)
+        self.catalog_menu.addAction("Управление каталогами…", self._open_catalogs)
+        self.catalog_menu.addAction("Добавить папку…", self.top_toolbar.btn_add_folder.click)
+        self.catalog_menu.addAction("Добавить с сайта…", lambda: self.top_toolbar.show_import_dialog(self))
+        self.catalog_menu.addSeparator()
+        self.catalog_menu.addAction("Скрытые изображения…", self.top_toolbar.btn_hidden.click)
+        maintenance = self.catalog_menu.addMenu("Обслуживание")
+        index_action = maintenance.addAction("Индексация", self.top_toolbar.btn_index.click)
+        check_action = maintenance.addAction("Проверить файлы", self.top_toolbar.btn_cleanup.click)
+
+        def refresh_actions():
+            index_action.setEnabled(self.top_toolbar.btn_index.isEnabled())
+            check_action.setEnabled(self.top_toolbar.btn_cleanup.isEnabled())
+            check_action.setText(self.top_toolbar.btn_cleanup.text())
+
+        self.catalog_menu.aboutToShow.connect(refresh_actions)
+        maintenance.aboutToShow.connect(refresh_actions)
+        self.search_panel.btn_catalogs.setMenu(self.catalog_menu)
 
     def _on_tab_changed(self, index):
-        tab_text = self.tabs.tabText(index)
-        if tab_text in (tr("select_all"), "Выделить все", "Select All"):
-            self.tabs.setCurrentIndex(self._previous_tab_index)
-            self._select_all_gallery()
-        elif tab_text in (tr("delete"), "Удалить", "Delete"):
-            self.tabs.setCurrentIndex(self._previous_tab_index)
-            self._delete_selected_gallery()
-        elif tab_text in (tr("favorites"), "Избранное", "Favorites"):
-            self.tabs.setCurrentIndex(self._previous_tab_index)
-            self._filter_favorites()
-        else:
-            self._previous_tab_index = index
+        # Changing presentation does not alter the query or filters.
+        self._previous_tab_index = index
 
     def _select_all_gallery(self):
-        self.gallery.selectAll()
+        (self.gallery if self.tabs.currentIndex() == 0 else self.library_table).selectAll()
 
     def _delete_selected_gallery(self):
-        selection_model = self.gallery.selectionModel()
-        if not selection_model.hasSelection():
-            QMessageBox.information(self, "Ничего не выбрано", "Пожалуйста, выделите картинки для удаления.")
+        if self.tabs.currentIndex() == 0:
+            indexes = self.gallery.selectionModel().selectedIndexes()
+            assets = [self.gallery_model.assets[index.row()] for index in indexes]
+        else:
+            rows = self.library_table.selectionModel().selectedRows()
+            selected = {int(self.library_table.model().item(index.row(), 0).text()) for index in rows}
+            assets = [asset for asset in self.gallery_model.assets if asset.id in selected]
+        if not assets:
+            QMessageBox.information(self, "Ничего не выбрано", "Выделите изображения для удаления.")
             return
-
-        indexes = selection_model.selectedIndexes()
-        assets_to_delete = [self.gallery_model.assets[idx.row()] for idx in indexes]
-        self._delete_assets_batch(assets_to_delete)
+        self._delete_assets_batch(assets)
 
     def _filter_favorites(self):
-        """Фильтрует галерею, оставляя только избранные ассеты."""
-        import sqlite3
-        from database.models import Asset
-        
-        favorites = []
-        with self.db.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM assets WHERE is_favorite = 1 ORDER BY created_at DESC")
-            for row_raw in cur.fetchall():
-                row = dict(row_raw)
-                favorites.append(Asset(
-                    id=row['id'], original_url=row['original_url'],
-                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
-                    width=row['width'], height=row['height'],
-                    project_id=row.get('project_id'),
-                    category=row.get('category', '3d_render'),
-                    image_type=row.get('image_type', 'Photography'),
-                    local_path=row.get('local_path', ''),
-                    is_favorite=bool(row.get('is_favorite', 0)),
-                    description=row.get('description', '')
-                ))
-        
-        self.gallery_model.setAssets(favorites)
-        self.status_label.setText(f"⭐ Избранное: {len(favorites)} изображений")
-        self.tabs.setCurrentIndex(0) # Переключаемся на вкладку Галерея
+        self.search_panel.favorite_check.setChecked(not self.search_panel.favorite_check.isChecked())
 
     def _setup_gallery_tab(self):
         gallery_tab = QWidget()
@@ -297,102 +360,107 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(library_tab, tr("table"))
 
     def _delete_assets_batch(self, assets: list):
-        """Централизованное удаление списка ассетов (БД + FAISS + файлы)."""
-        if not assets:
+        """Compatibility entry point: reversible hiding, never physical deletion."""
+        ids = list(dict.fromkeys(asset.id for asset in assets if asset.id is not None))
+        if not ids:
             return False
-
-        count = len(assets)
-        msg = f"Вы действительно хотите удалить {count} ассетов?\n\nОни будут скрыты из галереи и не добавятся при повторном сканировании."
-        reply = QMessageBox.question(self, "Удаление", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        
+        rows = []
+        try:
+            with self.db.get_connection() as conn:
+                for start in range(0, len(ids), 500):
+                    chunk = ids[start:start + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    rows.extend(dict(row) for row in conn.execute(f"SELECT * FROM assets WHERE id IN ({placeholders})", chunk))
+        except Exception as error:
+            QMessageBox.critical(self, "Скрытие не выполнено", "Не удалось прочитать изображения: " + str(error))
+            return False
+        if not rows:
+            return False
+        reply = QMessageBox.question(self, "Скрыть изображения",
+            f"Скрыть {len(rows)} изображений из библиотеки?\n\nВернуть их можно через «Каталоги → Скрытые изображения». Файлы, теги и избранное сохраняются.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return False
-
-        deleted_count = 0
-        asset_ids = []
-        
-        for asset in assets:
-            asset_ids.append(asset.id)
-            
-            # 1. Помечаем как удаленный для игнорирования в будущем
-            if asset.original_url:
-                self.db.mark_as_deleted(asset.original_url, reason="user_deleted", phash=asset.phash)
-            
-            # 2. Удаляем физический файл ТОЛЬКО для веба
-            if asset.image_type != "Local":
-                if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
-                    try: os.remove(asset.thumbnail_path)
-                    except Exception: pass
-            
-            deleted_count += 1
-
-        # 3. Удаляем из БД пакетно (одно соединение)
-        with self.db.get_connection() as conn:
-            for aid in asset_ids:
-                conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (aid,))
-                conn.execute("DELETE FROM assets WHERE id = ?", (aid,))
-            conn.commit()
-
-        # 4. Удаляем из FAISS
-        if asset_ids:
-            self.faiss_mgr.remove_ids(asset_ids)
-
+        try:
+            self.visibility.hide(rows)
+        except Exception as error:
+            QMessageBox.critical(self, "Скрытие не выполнено", str(error))
+            return False
         self._load_assets_for_gallery()
-        self._refresh_library()
-        self.status_label.setText(f"🧹 Удалено {deleted_count} ассетов")
+        self.status_label.setText(f"Скрыто изображений: {len(rows)}. Восстановление — «Каталоги → Скрытые изображения».")
         return True
 
+    def _open_hidden_assets(self):
+        try:
+            dialog = HiddenAssetsDialog(self.db, self.visibility, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self._restore_hidden_assets(dialog.restore_ids)
+        except Exception as error:
+            QMessageBox.critical(self, "Скрытые изображения", str(error))
+
+    def _restore_hidden_assets(self, ids):
+        self.visibility.restore(ids)
+        self._load_assets_for_gallery()
+        self.status_label.setText(f"Восстановлено изображений: {len(ids)}. Текущие фильтры сохраняются.")
+
     def _cleanup_missing_files(self):
-        """Очистка базы от записей, файлы которых были удалены пользователем вручную."""
-        self.status_label.setText("🧹 Запуск очистки...")
-        self.progress_bar.setVisible(True)
+        """Inspect availability; never infer deletion from an unavailable disk."""
+        if getattr(self, "_availability_worker", None):
+            self._availability_worker.cancellation.set()
+            self.status_label.setText("Остановка проверки после текущего обращения к файлу…")
+            return
+        self.status_label.setText("Проверка доступности файлов…")
+        self.progress_bar.show()
         self.progress_bar.setRange(0, 0)
-        
-        class CleanupWorker(QRunnable):
-            def __init__(self, db, faiss_mgr):
+
+        class CheckSignals(QObject):
+            finished = pyqtSignal(object)
+            error = pyqtSignal(str)
+            progress = pyqtSignal(int, int)
+
+        class CheckWorker(QRunnable):
+            def __init__(self, db):
                 super().__init__()
                 self.db = db
-                self.faiss_mgr = faiss_mgr
-                self.signals = type('Signals', (QObject,), {
-                    'finished': pyqtSignal(int, int), # deleted_count, orphan_count
-                    'error': pyqtSignal(str)
-                })()
+                self.signals = CheckSignals()
+                from threading import Event
+                self.cancellation = Event()
 
             def run(self):
+                from database.availability import inspect_files
                 try:
-                    deleted_count, deleted_ids = self.db.cleanup_missing_files()
-                    
-                    # Глубокая очистка FAISS
-                    orphan_ids = []
-                    faiss_ids = self.faiss_mgr.get_all_ids()
-                    db_ids = self.db.get_all_asset_ids()
-                    orphan_ids = [int(fid) for fid in faiss_ids if int(fid) not in db_ids]
-                    
-                    if orphan_ids:
-                        self.faiss_mgr.remove_ids(orphan_ids)
-                        
-                    if deleted_ids:
-                        self.faiss_mgr.remove_ids(deleted_ids)
-                        
-                    self.signals.finished.emit(deleted_count, len(orphan_ids))
-                except Exception as e:
-                    self.signals.error.emit(str(e))
+                    self.signals.finished.emit(inspect_files(self.db, self.cancellation, self.signals.progress.emit))
+                except Exception as error:
+                    self.signals.error.emit(str(error))
 
-        worker = CleanupWorker(self.db, self.faiss_mgr)
-        worker.signals.finished.connect(self._on_cleanup_finished)
-        worker.signals.error.connect(lambda err: self.status_label.setText(f"❌ Ошибка очистки: {err}"))
+        worker = CheckWorker(self.db)
+        self._availability_worker = worker
+        self.top_toolbar.btn_cleanup.setText("Остановить проверку")
+        worker.signals.finished.connect(self._on_availability_finished)
+        worker.signals.error.connect(self._on_availability_error)
+        worker.signals.progress.connect(self._on_availability_progress)
         QThreadPool.globalInstance().start(worker)
 
-    def _on_cleanup_finished(self, deleted_count, orphan_count):
-        self.progress_bar.setVisible(False)
-        total_removed = deleted_count + orphan_count
-        if total_removed > 0:
-            self.status_label.setText(f"🧹 Очищено {total_removed} неактуальных записей")
-            self._load_assets_for_gallery()
-            self._refresh_library()
-        else:
-            self.status_label.setText("✅ Отсутствующие файлы не найдены")
+    def _on_availability_progress(self, checked, total):
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(checked)
+        self.status_label.setText(f"Проверка файлов: {checked} из {total}")
 
+    def _on_availability_finished(self, report):
+        from ui.availability_dialog import AvailabilityDialog
+        self._availability_worker = None
+        self.top_toolbar.btn_cleanup.setText("Проверить файлы")
+        self.progress_bar.hide()
+        prefix = "Проверка остановлена. " if report.cancelled else ""
+        self.status_label.setText(prefix + f"Проверено {report.checked}; проблем с доступом: {len(report.issues)}. Данные сохранены.")
+        self._availability_dialog = AvailabilityDialog(report, self)
+        self._availability_dialog.show()
+
+    def _on_availability_error(self, error):
+        self._availability_worker = None
+        self.top_toolbar.btn_cleanup.setText("Проверить файлы")
+        self.progress_bar.hide()
+        self.status_label.setText("Не удалось проверить доступность: " + error)
 
     def update_sources_panel(self):
         # 1. Получаем "точки входа" из таблицы sources
@@ -421,6 +489,7 @@ class MainWindow(QMainWindow):
                 hidden_prefixes.append(os.path.join(app_data, 'ReferAssetManager').lower())
             
             all_folders = set(source_folders)
+            direct_folders = set()
             for p in asset_paths:
                 folder = os.path.normpath(os.path.dirname(p))
                 folder_lower = folder.lower()
@@ -428,6 +497,7 @@ class MainWindow(QMainWindow):
                 # Если папка лежит внутри системной директории (кэш миниатюр и т.д.) - игнорируем
                 if any(folder_lower.startswith(hp) for hp in hidden_prefixes):
                     continue
+                direct_folders.add(folder)
                     
                 # Добавляем саму папку и ВСЕ её родительские папки вверх по дереву
                 curr = folder
@@ -437,33 +507,53 @@ class MainWindow(QMainWindow):
                     if next_parent == curr: break # Дошли до корня
                     curr = next_parent
             
-        self.search_panel.update_custom_folders(list(all_folders))
+        self.search_panel.update_custom_folders(list(all_folders), direct_folders=direct_folders, group_store=self.group_store)
 
     def _add_folder(self):
-        folder_path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
-        if folder_path:
-            parse_mode = "3D Models" if self.top_toolbar.check_no_textures.isChecked() else "All"
-            skip_deleted = self.top_toolbar.check_ignore_deleted.isChecked()
-            recursive = self.top_toolbar.check_subfolders.isChecked()
+        self._configure_folder()
 
-            self.top_toolbar.set_scraping_state(True)
-            self.status_label.setText(f"Сканирование ({parse_mode}): {folder_path}")
-            self.progress_bar.setVisible(True)
-            self.progress_bar.setRange(0, 0)
-            
-            if self.active_scraper:
-                self.active_scraper.cancel()
-                
-            self.active_scraper = LocalFolderParser(
-                folder_path, self.db, 
-                mode=parse_mode, 
-                recursive=recursive, 
-                skip_deleted=skip_deleted
-            )
-            self.active_scraper.signals.progress.connect(self._on_local_folder_progress)
-            self.active_scraper.signals.finished.connect(self.on_scrape_finished)
-            self.active_scraper.signals.error.connect(self.on_scrape_error)
-            QThreadPool.globalInstance().start(self.active_scraper)
+    def _configure_folder(self, path=""):
+        if self.active_scraper:
+            self.status_label.setText("Дождитесь завершения текущего добавления изображений.")
+            return
+        dialog = FolderImportDialog(self, path=path, group_store=self.group_store)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._scan_folder(dialog.options())
+
+    def _scan_folder(self, options):
+        if self.active_scraper:
+            self.status_label.setText("Добавление изображений уже выполняется.")
+            return
+        gid = options.get("group_id")
+        if gid:
+            self.group_store.assign_source(options["path"], gid)
+            try:
+                self.group_store.save()
+            except Exception:
+                pass
+        self.top_toolbar.set_scraping_state(True)
+        self.status_label.setText("Сканирование: " + options["path"])
+        self.progress_bar.show()
+        self.progress_bar.setRange(0, 0)
+        self.active_scraper = LocalFolderParser(options["path"], self.db, mode=options["mode"],
+                                                recursive=options["recursive"], skip_deleted=options["skip_deleted"])
+        self.active_scraper.signals.progress.connect(self._on_local_folder_progress)
+        self.active_scraper.signals.finished.connect(self.on_scrape_finished)
+        self.active_scraper.signals.error.connect(self.on_scrape_error)
+        QThreadPool.globalInstance().start(self.active_scraper)
+
+    def _open_catalogs(self):
+        dialog = CatalogDialog(self.db, self.group_store, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.search_panel._sync_store_settings()
+        self.update_sources_panel()
+        self.search_panel._emit_search()
+        if dialog.action:
+            if dialog.action[0] == "rescan":
+                self._configure_folder(dialog.action[1])
+            elif dialog.action[0] == "add":
+                self._configure_folder("")
 
     def _on_local_folder_progress(self, current: int, total: int, info: str):
         self.progress_bar.setMaximum(total)
@@ -471,235 +561,66 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Сканирование [{current}/{total}]: {info}")
 
     def _remove_source_folder(self, path_or_domain: str):
-        """Полное удаление источника и всех его ассетов из БД и FAISS."""
-        msg = f"Удалить источник '{path_or_domain}' и все связанные с ним изображения из галереи?\n\nФайлы на диске затронуты не будут."
-        reply = QMessageBox.question(self, "Удаление источника", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        
+        """Disables a source in group_store; library rows and files are retained."""
+        reply = QMessageBox.question(self, "Отключить источник",
+            f"Отключить «{path_or_domain}» из поиска?\n\nДанные сохраняются. Локальные каталоги можно включить через «Каталоги».",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
-
-        # 1. Находим все ассеты, принадлежащие этому источнику или пути
-        assets_to_delete = []
-        with self.db.get_connection() as conn:
-            cur = conn.cursor()
-            
-            # Определяем, это веб-домен или локальный путь
-            if path_or_domain in ('archdaily', 'behance'):
-                domain = 'archdaily.com' if path_or_domain == 'archdaily' else 'behance.net'
-                cur.execute("""
-                    SELECT a.* FROM assets a 
-                    JOIN sources s ON a.source_id = s.id 
-                    WHERE s.domain = ?
-                """, (domain,))
-            else:
-                # Для локальных папок удаляем всё, что начинается с этого пути
-                search_path = path_or_domain.replace('\\', '/')
-                if not search_path.endswith('/'): search_path += '/'
-                cur.execute("SELECT * FROM assets WHERE REPLACE(local_path, '\\', '/') LIKE ?", (search_path + "%",))
-            
-            rows = cur.fetchall()
-            for row in rows:
-                assets_to_delete.append(Asset(
-                    id=row['id'], original_url=row['original_url'],
-                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
-                    project_id=row.get('project_id'),
-                    image_type=row['image_type'] or 'Photography'
-                ))
-
-        # 2. Удаляем ассеты пачкой (уже синхронизирует FAISS и БД)
-        if assets_to_delete:
-            # Мы вызываем _delete_assets_batch, но нам нужно избежать ПОВТОРНОГО подтверждения внутри него.
-            # Поэтому мы временно подменим QMessageBox.question или просто реализуем логику тут.
-            # На самом деле, лучше просто скопировать логику удаления без подтверждения.
-            
-            deleted_count = 0
-            asset_ids = []
-            for asset in assets_to_delete:
-                asset_ids.append(asset.id)
-                if asset.original_url:
-                    self.db.mark_as_deleted(asset.original_url, reason="source_removed", phash=asset.phash)
-                if asset.image_type != "Local":
-                    if asset.thumbnail_path and os.path.exists(asset.thumbnail_path):
-                        try: os.remove(asset.thumbnail_path)
-                        except Exception: pass
-                deleted_count += 1
-            
-            with self.db.get_connection() as conn:
-                for aid in asset_ids:
-                    conn.execute("DELETE FROM asset_tags WHERE asset_id = ?", (aid,))
-                    conn.execute("DELETE FROM assets WHERE id = ?", (aid,))
-                conn.commit()
-            
-            if asset_ids:
-                self.faiss_mgr.remove_ids(asset_ids)
-            
-            logger.info(f"Removed source {path_or_domain}: {deleted_count} assets deleted")
-
-        # 3. Удаляем сам источник из таблицы sources
-        with self.db.get_connection() as conn:
-            if path_or_domain in ('archdaily', 'behance'):
-                domain = 'archdaily.com' if path_or_domain == 'archdaily' else 'behance.net'
-                conn.execute("DELETE FROM sources WHERE domain = ?", (domain,))
-            else:
-                conn.execute("DELETE FROM sources WHERE domain = ?", (path_or_domain,))
-            conn.commit()
-
-        # 4. Обновляем UI
+        self.group_store.set_source_disabled(path_or_domain, True)
+        try:
+            self.group_store.save()
+        except Exception:
+            pass
+        self.search_panel._sync_store_settings()
         self.update_sources_panel()
-        self._load_assets_for_gallery()
-        self._refresh_library()
-        self.status_label.setText(f"🗑 Источник '{path_or_domain}' удален")
+        self.search_panel._emit_search()
 
     def _load_assets_for_gallery(self):
-        # Получаем выбранные источники
-        selected_sources = self.search_panel.get_selected_sources()
-        
-        # Если ничего не выбрано - галерея пустая
-        if not selected_sources:
-            self.gallery_model.setAssets([])
-            return
-
-        with self.db.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-
-            if getattr(self, 'filter_author', None):
-                query = "SELECT a.* FROM assets a JOIN projects p ON a.project_id = p.id"
-                conditions = []
-                conditions.append("p.author = ?")
-                params = [self.filter_author]
-            else:
-                query = "SELECT a.* FROM assets a"
-                conditions = []
-                params = []
-
-            if getattr(self, 'filter_project_id', None) is not None:
-                conditions.append("a.project_id = ?")
-                params.append(self.filter_project_id)
-            
-            # --- Логика фильтрации по источникам ---
-            web_domains = []
-            folder_paths = []
-
-            for src in selected_sources:
-                if src == 'archdaily':
-                    web_domains.append('archdaily.com')
-                elif src == 'behance':
-                    web_domains.append('behance.net')
-                else:
-                    folder_paths.append(src)
-
-            source_conditions = []
-            
-            # 1. Фильтр по веб-доменам (через source_id)
-            if web_domains:
-                domain_placeholders = ','.join('?' for _ in web_domains)
-                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", web_domains)
-                allowed_source_ids = [row['id'] for row in cur.fetchall()]
-                if allowed_source_ids:
-                    src_placeholders = ','.join('?' for _ in allowed_source_ids)
-                    source_conditions.append(f"a.source_id IN ({src_placeholders})")
-                    params.extend(allowed_source_ids)
-
-            # 2. Фильтр по локальным папкам (через префикс пути)
-            if folder_paths:
-                folder_sub_conditions = []
-                for path in folder_paths:
-                    # Нормализуем путь: превращаем всё в один тип слэша (/) для сравнения
-                    search_path = path.replace('\\', '/')
-                    if not search_path.endswith('/'):
-                        search_path += '/'
-                    
-                    # В SQL мы тоже превращаем все слэши в / перед сравнением
-                    # Это гарантирует совпадение даже если в БД каша из слэшей
-                    folder_sub_conditions.append("REPLACE(a.local_path, '\\', '/') LIKE ?")
-                    params.append(search_path + "%")
-                
-                if folder_sub_conditions:
-                    source_conditions.append(f"({' OR '.join(folder_sub_conditions)})")
-
-            if source_conditions:
-                conditions.append(f"({' OR '.join(source_conditions)})")
-            else:
-                # Источники выбраны в UI, но в БД их еще нет
-                self.gallery_model.setAssets([])
-                return
-
-            # (Category filtering removed)
-            
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-            query += " ORDER BY a.created_at DESC"
-            
-            cur.execute(query, params)
-            
-            assets = []
-            for row_raw in cur.fetchall():
-                row = dict(row_raw)
-                assets.append(Asset(
-                    id=row['id'], original_url=row['original_url'],
-                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
-                    width=row['width'], height=row['height'],
-                    project_id=row.get('project_id'),
-                    category=row.get('category', '3d_render'),
-                    image_type=row.get('image_type', 'Photography'),
-                    local_path=row.get('local_path', ''),
-                    is_favorite=bool(row.get('is_favorite', 0))
-                ))
-            self.gallery_model.setAssets(assets)
+        self._update_breadcrumbs()
 
     def _refresh_library(self):
         from PyQt6.QtGui import QStandardItemModel, QStandardItem
-        model = QStandardItemModel()
-        model.setHorizontalHeaderLabels(["#", "Studio", "URL", "Category", "W×H", "Date", "pHash"])
-
-        with self.db.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT a.id, COALESCE(s.domain, 'unknown') as domain, a.original_url, 
-                       a.category, a.width, a.height, a.created_at, a.phash
-                FROM assets a
-                LEFT JOIN sources s ON a.source_id = s.id
-                ORDER BY a.created_at DESC
-            """)
-
-            for row_raw in cur.fetchall():
-                row = dict(row_raw)
-                model.appendRow([
-                    QStandardItem(str(row['id'])),
-                    QStandardItem(str(row['domain'])),
-                    QStandardItem(str(row['original_url'])[:80] + "..."),
-                    QStandardItem(str(row.get('category', '3d_render'))),
-                    QStandardItem(f"{row['width']}×{row['height']}"),
-                    QStandardItem(str(row['created_at'])[:16]),
-                    QStandardItem(str(row['phash'])[:8])
-                ])
-
+        model = QStandardItemModel(self.library_table)
+        model.setHorizontalHeaderLabels(["ID", "Файл", "Источник / URL", "Категория", "Размер", "Дата"])
+        for asset in self.gallery_model.assets:
+            model.appendRow([QStandardItem(str(asset.id)),
+                             QStandardItem(os.path.basename(asset.local_path or asset.thumbnail_path or "")),
+                             QStandardItem(asset.original_url or asset.local_path or ""),
+                             QStandardItem(asset.category or ""),
+                             QStandardItem(f"{asset.width} × {asset.height}"),
+                             QStandardItem(str(asset.created_at)[:16])])
+        previous = self.library_table.model()
         self.library_table.setModel(model)
+        if previous:
+            previous.deleteLater()
         self.library_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
 
     def _on_library_doubleclick(self, index):
+        if not index.isValid():
+            return
+        asset_id = int(self.library_table.model().item(index.row(), 0).text())
+        for row, asset in enumerate(self.gallery_model.assets):
+            if asset.id == asset_id:
+                self.gallery._on_item_clicked(self.gallery_model.index(row))
+                return
+
+    def _open_library_original(self):
         from PyQt6.QtGui import QDesktopServices
         from PyQt6.QtCore import QUrl
-        row = index.row()
-        model = self.library_table.model()
-        url_item = model.item(row, 2)
-        if url_item:
-            asset_id = model.item(row, 0).text()
-            with self.db.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("SELECT original_url FROM assets WHERE id = ?", (asset_id,))
-                db_row = cur.fetchone()
-                if db_row:
-                    QDesktopServices.openUrl(QUrl(db_row[0]))
+        index = self.library_table.currentIndex()
+        if not index.isValid():
+            return
+        value = self.library_table.model().item(index.row(), 2).text()
+        if value:
+            QDesktopServices.openUrl(QUrl(value) if value.startswith(("http://", "https://")) else QUrl.fromLocalFile(value))
 
     def _show_library_context_menu(self, pos):
         menu = QMenu(self)
         open_action = QAction(tr("open_url"), self)
-        open_action.triggered.connect(lambda: self._on_library_doubleclick(self.library_table.currentIndex()))
+        open_action.triggered.connect(self._open_library_original)
 
-        delete_action = QAction(tr("delete"), self)
+        delete_action = QAction(tr("hide"), self)
         delete_action.triggered.connect(self._delete_selected_asset)
 
         menu.addAction(open_action)
@@ -719,9 +640,11 @@ class MainWindow(QMainWindow):
             cur.execute("SELECT * FROM assets WHERE id = ?", (asset_id,))
             row = cur.fetchone()
             if row:
+                row = dict(row)
                 asset = Asset(
                     id=row['id'], original_url=row['original_url'],
                     thumbnail_path=row['thumbnail_path'], phash=row['phash'],
+                    local_path=row.get('local_path') or '',
                     project_id=row.get('project_id'),
                     image_type=row['image_type'] or 'Photography'
                 )
@@ -731,9 +654,8 @@ class MainWindow(QMainWindow):
         self.tabs.blockSignals(True)
         self.tabs.setTabText(0, tr("gallery"))
         self.tabs.setTabText(1, tr("table"))
-        self.tabs.setTabText(2, tr("favorites"))
-        self.tabs.setTabText(3, tr("select_all"))
-        self.tabs.setTabText(4, tr("delete"))
+        self.select_all_button.setText(tr("select_all"))
+        self.delete_button.setText(tr("hide"))
         
         self.status_label.setText(tr("ready"))
         self.search_panel.retranslate_ui()
@@ -860,6 +782,15 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Relinking failed: {e}")
 
     def closeEvent(self, event):
+        self._closing = True
+        self._results_revision += 1
+        self._pending_results_worker = None
+        if self.ai is not None and hasattr(self.ai, 'close'):
+            self.ai.close()
+        if getattr(self, "_availability_worker", None):
+            self._availability_worker.cancellation.set()
+        self.gallery_model.cancel_loads()
+        self.gallery.thread_pool.waitForDone(2000)
         if self.active_scraper:
             self.active_scraper.cancel()
         if self.active_indexer:
@@ -922,6 +853,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self._refresh_library()
         self.update_sources_panel()
+        self._load_assets_for_gallery()
 
     @pyqtSlot(str, str)
     def on_scrape_error(self, url, error):
@@ -948,9 +880,9 @@ class MainWindow(QMainWindow):
         # Если инициализация еще не начиналась или упала, запускаем синхронно
         self.status_label.setText("⏳ Загрузка SigLIP AI...")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        from ai.engine import AiEngine
+        from ai.runtime import create_engine
         try:
-            self.ai = AiEngine()
+            self.ai = create_engine()
         finally:
             QApplication.restoreOverrideCursor()
         return self.ai
@@ -1010,13 +942,13 @@ class MainWindow(QMainWindow):
     # === Search Logic ===
 
     def _on_clear_search(self):
+        self._query_info = {}
+        self._update_breadcrumbs()
+
+    def _on_reset_filters(self):
         self.filter_project_id = None
         self.filter_author = None
-        self._load_assets_for_gallery()
-        self.status_label.setText("Сброс фильтров. Показаны все выбранные источники.")
-        self._update_breadcrumbs() # Clear breadcrumbs
-
-
+        self._update_breadcrumbs()
 
     @pyqtSlot(str)
     def _extract_tags_from_image(self, image_path: str):
@@ -1026,6 +958,11 @@ class MainWindow(QMainWindow):
         if self.active_searcher:
             return
             
+        if not self.ai:
+            self._background_ai_init()
+            self.status_label.setText("Дождитесь загрузки модели и повторите анализ изображения.")
+            return
+        self._extract_image = image_path
         self.status_label.setText("Анализ изображения (Zero-Shot Classification)...")
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
@@ -1044,8 +981,8 @@ class MainWindow(QMainWindow):
             def run(self):
                 try:
                     if not self.ai:
-                        from ai.engine import AiEngine
-                        self.ai = AiEngine()
+                        from ai.runtime import create_engine
+                        self.ai = create_engine()
                         
                     tags = self.ai.extract_tags(self.img_path)
                     self.signals.result.emit(tags)
@@ -1064,7 +1001,8 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.status_label.setText(f"Извлечено тегов: {len(new_tags)}")
         
-        if not new_tags:
+        if not new_tags or getattr(self, "_extract_image", None) != self.search_panel.hybrid_input.image_path:
+            self._run_requested_search()
             return
             
         current_tags = set(getattr(self.search_panel, 'selected_tags', []))
@@ -1102,7 +1040,8 @@ class MainWindow(QMainWindow):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(4)
             
-            lbl = QLabel(label)
+            lbl = QLabel(label if len(label) < 90 else label[:87] + "…")
+            lbl.setToolTip(label)
             lbl.setStyleSheet("color: #888; font-size: 12px;")
             
             btn_close = QPushButton("✕")
@@ -1128,11 +1067,6 @@ class MainWindow(QMainWindow):
         if img_path:
             add_text_crumb("🖼️", 'image')
 
-        # 3. Tags
-        if tags:
-            for tag in tags:
-                add_text_crumb(tag, 'tag', tag)
-
         # 4. Project Filter
         if getattr(self, 'filter_project_id', None) is not None:
             try:
@@ -1150,9 +1084,19 @@ class MainWindow(QMainWindow):
         if getattr(self, 'filter_author', None):
             add_text_crumb(f"👤 {self.filter_author}", 'author')
 
+        # 6. Favorites Filter
+        if self.search_panel.favorite_check.isChecked():
+            add_text_crumb("★ Избранное", 'favorites')
+
+        # 7. Top Filter
+        if self.search_panel.top_check.isChecked():
+            add_text_crumb("🏆 ТОП", 'top')
+
         # Trigger the actual search
-        self._perform_visual_search(text, img_path, threshold or (self.search_panel.slider_sens.value()/100.0), 
-                                  sources or self.search_panel.get_selected_sources(), tags)
+        self.breadcrumbs_widget.setVisible(self.breadcrumbs_layout.count() > 0)
+        self.filters_button.setText("Фильтры" + (f" · {len(tags or []) + len(self.search_panel.excluded_tags())}" if tags or self.search_panel.excluded_tags() else ""))
+        self._perform_visual_search(text, img_path, 0.0,
+                                  sources if sources is not None else self.search_panel.get_selected_sources(), tags)
 
     def _remove_breadcrumb_filter(self, filter_type, value=None):
         """Удаляет фильтр через хлебные крошки."""
@@ -1169,266 +1113,174 @@ class MainWindow(QMainWindow):
             self.filter_project_id = None
         elif filter_type == 'author':
             self.filter_author = None
+        elif filter_type == 'exclude':
+            self.search_panel.exclude_input.setText(", ".join(t for t in self.search_panel.excluded_tags() if t != value))
+        elif filter_type == 'favorites':
+            self.search_panel.favorite_check.setChecked(False)
+        elif filter_type == 'top':
+            self.search_panel.top_check.setChecked(False)
         
         self._update_breadcrumbs() # Re-emit search
 
-    def _perform_visual_search(self, text: str, img_path: str, threshold: float, sources: list, tags: list = None):
-        if not text and not img_path and not tags and not getattr(self, 'filter_project_id', None) and not getattr(self, 'filter_author', None):
-            self._load_assets_for_gallery()
-            return
-            
-        if self.faiss_mgr.index.ntotal == 0:
-            QMessageBox.warning(self, "Пустая база", "База векторов пуста. Сначала выполните индексацию.")
-            return
+    def _current_filters(self):
+        panel = self.search_panel
+        return SearchFilters(sources=tuple(self.search_sources), section="all",
+                             excluded_sources=panel.get_excluded_sources(),
+                             tags=tuple(self.search_tags), exclude_tags=panel.excluded_tags(),
+                             tag_match=panel.tag_match.currentData(), favorites=panel.favorite_check.isChecked(),
+                             top_only=panel.top_check.isChecked(),
+                             plants_only=False,
+                             project_id=self.filter_project_id, author=self.filter_author)
 
-        if not text and not img_path:
-            # Only tags search
-            self.search_threshold = threshold
-            self.search_sources = sources
-            self.search_tags = tags or []
-            import numpy as np
-            self._search_vectors(np.array([], dtype=np.float32), "Search by tags")
+    def _perform_visual_search(self, text, img_path, threshold, sources, tags=None):
+        # Invalidate an in-flight filtering result even before a new embedding is ready.
+        self._results_revision += 1
+        self._pending_results_worker = None
+        self.current_search_text = text or ""
+        self.search_sources = list(sources)
+        self.search_tags = list(tags or [])
+        self.result_limit = config.SEARCH_PAGE_SIZE
+        self.more_button.hide()
+        self.result_title.setText("Эталонный ТОП" if self.search_panel.top_check.isChecked() else "Референсы")
+        if (not text and not img_path) or self.search_panel.text_mode.currentData() == "metadata":
+            self._requested_search = None
+            self.progress_bar.hide()
+            self.search_panel.query_warning.hide()
+            self._search_vectors(None, "метаданных")
             return
-            
-        # Prevent concurrent searches - SigLIP model is not thread-safe
+        self._requested_search = (embedding_key(text, img_path), text, img_path)
+        if self.faiss_mgr.index.ntotal == 0:
+            self._requested_search = None
+            self.status_label.setText("Индекс пуст. Поиск по названию доступен без индексации.")
+            self.gallery_model.setAssets([])
+            self._refresh_library()
+            self.result_count.setText("Индекс пуст")
+            self.more_button.hide()
+            return
+        self._run_requested_search()
+
+    def _run_requested_search(self):
+        if self._requested_search is None:
+            return
+        key, text, img_path = self._requested_search
+        if self._embedding_cache and self._embedding_cache[0] == key:
+            _, vector, info = self._embedding_cache
+            self._show_query_info(info)
+            self._search_vectors(vector, "похожих изображений")
+            return
+        # One inference at a time; only the latest requested input is retained.
         if self.active_searcher:
             return
-            
-        self.status_label.setText("🔍 Обработка визуального запроса...")
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)
-        self.search_threshold = threshold
-        self.search_sources = sources
-        self.search_tags = tags or []
-        self.current_search_text = text  # Сохраняем текст для поиска по описаниям
-
-        class SearchWorker(QRunnable):
-            class Signals(QObject):
-                result = pyqtSignal(object, str)
-                error = pyqtSignal(str)
-
-            def __init__(self, ai, text, img_path):
-                super().__init__()
-                self.ai = ai
-                self.text = text
-                self.img_path = img_path
-                self.signals = self.Signals()
-
-            def run(self):
-                try:
-                    if not self.ai:
-                        from ai.engine import AiEngine
-                        self.ai = AiEngine()
-                        
-                    v_final = None
-                    if self.text and self.img_path:
-                        v_txt = self.ai.get_text_embedding(self.text)
-                        v_img = self.ai.get_image_embedding(self.img_path)
-                        # Гибридное смешивание, 60% картинка, 40% текст (как в ТЗ)
-                        v_final = (v_img * 0.6 + v_txt * 0.4).astype('float32')
-                    elif self.text:
-                        v_final = self.ai.get_text_embedding(self.text).astype('float32')
-                    elif self.img_path:
-                        v_final = self.ai.get_image_embedding(self.img_path).astype('float32')
-                    
-                    if v_final is not None:
-                        v_final = v_final.reshape(1, -1)
-                        self.signals.result.emit(v_final, "гибридного запроса" if self.text and self.img_path else "запроса")
-                    else:
-                        import numpy as np
-                        self.signals.result.emit(np.array([], dtype=np.float32), "Search by tags")
-                except Exception as e:
-                    self.signals.error.emit(str(e))
-
+        if not self.ai:
+            self.status_label.setText("Загрузка модели для поиска…")
+            self._background_ai_init()
+            return
         worker = SearchWorker(self.ai, text, img_path)
-        worker.signals.result.connect(self._on_search_result)
-        worker.signals.error.connect(self._on_search_error)
+        worker.signals.result.connect(self._on_embedding_result)
+        worker.signals.error.connect(self._on_embedding_error)
         self.active_searcher = worker
-        QThreadPool.globalInstance().start(worker)
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.show()
+        self.status_label.setText("Обработка поискового запроса…")
+        self._start_ai_worker(worker)
 
-    @pyqtSlot(np.ndarray, str)
-    def _on_search_result(self, vector, query_info):
+    @pyqtSlot(object, object, object)
+    def _on_embedding_result(self, key, vector, info):
         self.active_searcher = None
-        self.progress_bar.setVisible(False)
-        self._search_vectors(vector, query_info)
+        self._embedding_cache = (key, vector, info)
+        self.progress_bar.hide()
+        if self._requested_search and self._requested_search[0] == key:
+            self._show_query_info(info)
+            self._search_vectors(vector, "похожих изображений")
+        else:
+            self._run_requested_search()
+
+    @pyqtSlot(object, str)
+    def _on_embedding_error(self, key, error):
+        self.active_searcher = None
+        self.progress_bar.hide()
+        if self._requested_search and self._requested_search[0] == key:
+            self.status_label.setText("Ошибка поиска: " + error)
+            self.result_count.setText("Не удалось выполнить запрос")
+            self.gallery_model.setAssets([])
+            self._refresh_library()
+            self.more_button.hide()
+        else:
+            self._run_requested_search()
+
+    def _show_query_info(self, info):
+        self._query_info = info
+        warning = self.search_panel.query_warning
+        if info.get("truncated"):
+            warning.setText(f"Запрос: {info['token_count']} токенов, предел модели — {info['token_limit']}. "
+                            "Для поиска использовано начало. Сократите запрос или перенесите главное вперёд.")
+            warning.setToolTip("В модель передано: " + info.get("effective_text", ""))
+            warning.show()
+        else:
+            warning.hide()
 
     @pyqtSlot(str)
     def _on_search_error(self, error):
         self.active_searcher = None
-        self.progress_bar.setVisible(False)
-        self.status_label.setText("❌ Ошибка поиска")
-        QMessageBox.warning(self, "Ошибка поиска", error)
+        self.progress_bar.hide()
+        self.status_label.setText("Ошибка анализа: " + error)
+        self._run_requested_search()
 
-    def _search_vectors(self, vector: np.ndarray, query_info: str):
-        # 1. Pre-filtering: Gather IDs based on sources and tags
-        web_domains = []
-        folder_paths = []
-        for src in self.search_sources:
-            if src == 'archdaily':
-                web_domains.append('archdaily.com')
-            elif src == 'behance':
-                web_domains.append('behance.net')
-            else:
-                folder_paths.append(src)
-
-        valid_ids = []
-        
-        with self.db.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            
-            # Base query parts
-            joins = []
-            where_clauses = []
-            params = []
-
-            # --- PROJECT/AUTHOR FILTER ---
-            if getattr(self, 'filter_project_id', None) is not None:
-                where_clauses.append("a.project_id = ?")
-                params.append(self.filter_project_id)
-            if getattr(self, 'filter_author', None):
-                joins.append("JOIN projects p ON a.project_id = p.id")
-                where_clauses.append("p.author = ?")
-                params.append(self.filter_author)
-            
-            # --- SOURCES FILTER ---
-            source_conditions = []
-            if web_domains:
-                domain_placeholders = ','.join('?' for _ in web_domains)
-                cur.execute(f"SELECT id FROM sources WHERE domain IN ({domain_placeholders})", web_domains)
-                allowed_source_ids = [row['id'] for row in cur.fetchall()]
-                if allowed_source_ids:
-                    src_placeholders = ','.join('?' for _ in allowed_source_ids)
-                    source_conditions.append(f"a.source_id IN ({src_placeholders})")
-                    params.extend(allowed_source_ids)
-            
-            if folder_paths:
-                folder_sub_conditions = []
-                for path in folder_paths:
-                    search_path = path.replace('\\', '/')
-                    if not search_path.endswith('/'): search_path += '/'
-                    folder_sub_conditions.append("REPLACE(a.local_path, '\\', '/') LIKE ?")
-                    params.append(search_path + "%")
-                if folder_sub_conditions:
-                    source_conditions.append(f"({' OR '.join(folder_sub_conditions)})")
-                    
-            if source_conditions:
-                where_clauses.append(f"({' OR '.join(source_conditions)})")
-            else:
-                where_clauses.append("1=0") # No valid sources selected
-
-            # --- TAGS FILTER ---
-            tags = getattr(self, 'search_tags', [])
-            if tags:
-                # We need assets that have ALL selected tags
-                # Join with asset_tags and tags, group by asset_id and count
-                joins.append("JOIN asset_tags at ON a.id = at.asset_id")
-                joins.append("JOIN tags t ON at.tag_id = t.id")
-                
-                tag_placeholders = ','.join('?' for _ in tags)
-                where_clauses.append(f"t.name IN ({tag_placeholders})")
-                params.extend(tags)
-                
-                # Build the query with GROUP BY and HAVING
-                where_sql = " AND ".join(where_clauses)
-                query = f"SELECT a.id FROM assets a {' '.join(joins)} WHERE {where_sql} GROUP BY a.id HAVING COUNT(DISTINCT t.name) = ?"
-                params.append(len(tags))
-            else:
-                # Simple query without tags
-                where_sql = " AND ".join(where_clauses)
-                query = f"SELECT a.id FROM assets a {' '.join(joins)} WHERE {where_sql}"
-
-            cur.execute(query, params)
-            valid_ids = [row['id'] for row in cur.fetchall()]
-
-        if not valid_ids:
-            self.status_label.setText("Ничего не найдено по выбранным фильтрам (источники/теги).")
-            self.gallery_model.setAssets([])
+    def _search_vectors(self, vector, query_info):
+        if self._closing:
             return
+        self._results_revision += 1
+        worker = ResultsWorker(self._results_revision, self.db, self.faiss_mgr, self.visibility,
+                               self._current_filters(), self.search_panel.source_assignments,
+                               self.current_search_text, vector, self.result_limit,
+                               self.search_panel.text_mode.currentData() == 'metadata')
+        worker.signals.result.connect(self._on_results_ready)
+        worker.signals.error.connect(self._on_results_error)
+        self._pending_results_worker = worker
+        self.more_button.hide()
+        self.status_label.setText('Обновление результатов…')
+        self._dispatch_results_worker()
 
-        # 2. FAISS Vector Search with pre-filtering
-        results = []
-        
-        # --- TEXT SEARCH IN DESCRIPTIONS ---
-        text_match_ids = set()
-        if hasattr(self, 'current_search_text') and self.current_search_text:
-            query = self.current_search_text.lower().strip()
-            with self.db.get_connection() as conn:
-                cur = conn.cursor()
-                # Ищем по вхождению подстроки в описание
-                cur.execute("SELECT id FROM assets WHERE LOWER(description) LIKE ?", (f"%{query}%",))
-                # Ограничиваем только теми ID, которые прошли фильтрацию по источникам/тегам
-                valid_set = set(valid_ids)
-                for row in cur.fetchall():
-                    if row['id'] in valid_set:
-                        text_match_ids.add(row['id'])
-        
-        if vector is not None and len(vector) > 0:
-            k = min(1000, len(valid_ids))
-            distances, ids = self.faiss_mgr.search(vector, k=k, valid_ids=valid_ids)
+    def _start_results_worker(self, worker):
+        self._results_pool.start(worker)
 
-            import math
-            max_distance = 2.0 * math.exp(-5.3 * self.search_threshold)
-            
-            # Собираем результаты вектора
-            for dist, aid in zip(distances, ids):
-                if aid > 0 and dist <= max_distance:
-                    # Если есть и текстовое совпадение, повышаем приоритет (уменьшаем дистанцию)
-                    final_dist = dist * 0.5 if aid in text_match_ids else dist
-                    results.append((final_dist, int(aid)))
-            
-            # Добавляем текстовые совпадения, которых нет в векторном результате
-            vector_ids = set(aid for _, aid in results)
-            for aid in text_match_ids:
-                if aid not in vector_ids:
-                    # Присваиваем "хорошую" дистанцию текстовому совпадению
-                    results.append((0.1, int(aid)))
-            
-            # Сортируем по итоговой дистанции
-            results.sort()
-        else:
-            # Если нет вектора (только теги или текст), берем текстовые совпадения первыми
-            for aid in text_match_ids:
-                results.append((0.0, int(aid)))
-            
-            # Добавляем остальные валидные ID
-            for aid in valid_ids[:1000]:
-                if aid not in text_match_ids:
-                    results.append((1.0, int(aid)))
-        
-        if not results:
-            self.status_label.setText("Ничего не найдено (попробуйте изменить запрос или уменьшить строгость).")
+    def _dispatch_results_worker(self):
+        if not self._closing and self._active_results_worker is None and self._pending_results_worker is not None:
+            worker = self._pending_results_worker
+            self._pending_results_worker = None
+            self._active_results_worker = worker
+            self._start_results_worker(worker)
+
+    @pyqtSlot(int, object, object)
+    def _on_results_ready(self, revision, assets, total):
+        self._active_results_worker = None
+        if revision == self._results_revision:
+            self.gallery_model.setAssets(assets)
+            self._refresh_library()
+            label = f"Показано {len(assets)}" + (f" из {total}" if total is not None else " ближайших изображений")
+            if not assets:
+                label = "Нет совпадений по выбранным условиям"
+            self.result_count.setText(label)
+            self.status_label.setText(label)
+            self.more_button.setVisible(total > len(assets) if total is not None else len(assets) >= self.result_limit)
+        self._dispatch_results_worker()
+
+    @pyqtSlot(int, str)
+    def _on_results_error(self, revision, error):
+        self._active_results_worker = None
+        if revision == self._results_revision:
+            logger.error('Search failed: %s', error)
+            self.status_label.setText("Ошибка поиска: " + error)
+            self.result_count.setText("Не удалось выполнить запрос")
             self.gallery_model.setAssets([])
-            return
+            self._refresh_library()
+            self.more_button.hide()
+        self._dispatch_results_worker()
 
-        # 3. Fetch full asset data for the results
-        final_asset_ids = [aid for _, aid in results]
-        
-        with self.db.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            placeholders = ','.join('?' for _ in final_asset_ids)
-            cur.execute(f"SELECT * FROM assets WHERE id IN ({placeholders})", final_asset_ids)
-            rows = {row['id']: dict(row) for row in cur.fetchall()}
-
-        search_assets = []
-        for dist, aid in results:
-            if aid in rows:
-                row = rows[aid]
-                search_assets.append(Asset(
-                    id=row['id'], original_url=row['original_url'],
-                    thumbnail_path=row['thumbnail_path'], phash=row['phash'],
-                    width=row['width'], height=row['height'],
-                    project_id=row.get('project_id'),
-                    category=row.get('category', '3d_render'),
-                    image_type=row.get('image_type', 'Photography'),
-                    local_path=row.get('local_path', ''),
-                    is_favorite=bool(row.get('is_favorite', 0))
-                ))
-
-        self.gallery_model.setAssets(search_assets)
-        self.status_label.setText(f"Найдено {len(search_assets)} изображений")
-        self.tabs.setCurrentIndex(0)
+    def _show_more_results(self):
+        self.result_limit += config.SEARCH_PAGE_SIZE
+        vector = self._embedding_cache[1] if self._requested_search and self._embedding_cache and self._requested_search[0] == self._embedding_cache[0] else None
+        self._search_vectors(vector, "запроса")
 
     # === LM Studio / AI Integration ===
 

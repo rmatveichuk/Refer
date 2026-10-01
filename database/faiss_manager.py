@@ -1,4 +1,5 @@
 import os
+import sys
 import faiss
 import numpy as np
 from pathlib import Path
@@ -58,6 +59,9 @@ class FaissManager:
         if len(asset_ids) != vectors.shape[0]:
             raise ValueError(f"Mismatch: {len(asset_ids)} IDs for {vectors.shape[0]} vectors")
 
+        if not np.isfinite(vectors).all() or np.any(np.linalg.norm(vectors, axis=1) <= 1e-12):
+            raise ValueError("Cannot index non-finite or zero embeddings")
+
         id_array = np.array(asset_ids, dtype=np.int64)
         self.index.add_with_ids(vectors, id_array)
 
@@ -73,15 +77,26 @@ class FaissManager:
         try:
             query_vector = np.asarray(query_vector, dtype=np.float32)
         except Exception as e:
-            logger.error(f"Error converting query_vector to float32: {e}, type: {type(query_vector)}")
-            query_vector = np.array([], dtype=np.float32)
+            raise ValueError("Search embedding must contain numeric values") from e
         
-        # Prevent FAISS crash if vector contains NaNs
-        if np.isnan(query_vector).any():
-            query_vector = np.nan_to_num(query_vector)
+        if not np.isfinite(query_vector).all():
+            raise ValueError("Search embedding contains non-finite values")
             
         if len(query_vector.shape) == 1:
             query_vector = np.expand_dims(query_vector, axis=0)
+
+        if query_vector.ndim != 2 or query_vector.shape[0] != 1:
+            raise ValueError("Expected one search embedding")
+        if query_vector.shape[1] and (query_vector.shape[1] != self.dimension or np.linalg.norm(query_vector) <= 1e-12):
+            raise ValueError("Search embedding has invalid dimension or zero length")
+        if k <= 0:
+            return np.array([]), np.array([])
+
+        if sys.platform == 'win32' and query_vector.shape[1] != 0:
+            # The Windows FAISS and PyTorch wheels ship incompatible OpenMP runtimes.
+            # Query the existing flat index through a NumPy view, without calling
+            # FAISS's OpenMP search or disabling its duplicate-runtime protection.
+            return self._search_flat_without_openmp(query_vector[0], k, valid_ids)
             
         if valid_ids is not None:
             if not valid_ids:
@@ -102,7 +117,7 @@ class FaissManager:
                 distances, indices = self.index.search(query_vector, k, params=params)
             except Exception as e:
                 logger.error(f"FAISS search error with valid_ids: {e}")
-                return np.array([]), np.array([])
+                raise RuntimeError("Не удалось выполнить поиск в выбранных источниках.") from e
         else:
             if query_vector.shape[1] == 0:
                 return np.array([]), np.array([])
@@ -111,9 +126,29 @@ class FaissManager:
                 distances, indices = self.index.search(query_vector, k)
             except Exception as e:
                 logger.error(f"FAISS search error: {e}")
-                return np.array([]), np.array([])
+                raise RuntimeError("Не удалось выполнить поиск в индексе.") from e
             
         return distances[0], indices[0]
+
+    def _search_flat_without_openmp(self, query, k, valid_ids):
+        flat = faiss.downcast_index(self.index.index)
+        if not isinstance(flat, faiss.IndexFlatL2):
+            raise RuntimeError('Безопасный поиск Windows требует индекс IndexFlatL2.')
+        ids = self.get_all_ids()
+        positions = np.arange(len(ids)) if valid_ids is None else np.flatnonzero(np.isin(ids, valid_ids))
+        vectors = faiss.rev_swig_ptr(flat.get_xb(), flat.ntotal * flat.d).reshape(flat.ntotal, flat.d)
+        distances = np.empty(len(positions), dtype=np.float32)
+        # Bound scratch memory instead of copying the entire 1152-dimensional library.
+        for start in range(0, len(positions), 1024):
+            batch = positions[start:start + 1024]
+            delta = vectors[batch] - query
+            distances[start:start + len(batch)] = np.einsum('ij,ij->i', delta, delta)
+        order = np.lexsort((ids[positions], distances))[:k]
+        found_distances = np.full(k, np.inf, dtype=np.float32)
+        found_ids = np.full(k, -1, dtype=np.int64)
+        found_distances[:len(order)] = distances[order]
+        found_ids[:len(order)] = ids[positions[order]]
+        return found_distances, found_ids
 
     def remove_ids(self, asset_ids: list[int]):
         """Removes vectors from index by their SQLite asset IDs."""

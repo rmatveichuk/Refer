@@ -92,6 +92,7 @@ THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
 # AI Settings
 SIGLIP_MODEL = "google/siglip2-so400m-patch14-384"
 VECTOR_DIMENSION = 1152  # 1152 for siglip2-so400m
+SEARCH_PAGE_SIZE = 400
 
 # Hardware / Performance Constants
 THUMBNAIL_SIZE = 1024 # px

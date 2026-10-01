@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit, QSizePolicy
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QDialog, QDialogButtonBox, QComboBox, QPushButton, QLabel, QLineEdit, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt
 import config
 from ui.translations import tr
@@ -8,6 +8,8 @@ class TopToolbar(QWidget):
     scrape_started = pyqtSignal(str, str) # parser_name, url
     scrape_stopped = pyqtSignal()
     add_folder_requested = pyqtSignal()
+    catalogs_requested = pyqtSignal()
+    hidden_assets_requested = pyqtSignal()
     index_requested = pyqtSignal()
     cleanup_requested = pyqtSignal()
     ignore_deleted_toggled = pyqtSignal(bool)
@@ -21,26 +23,18 @@ class TopToolbar(QWidget):
         self._init_ui()
 
     def _init_ui(self):
-        self.setFixedHeight(50)
+        self.setFixedHeight(34)
         self.setStyleSheet("""
-            QWidget { background-color: #1a1a1a; color: #ccc; }
+            QWidget { background-color: #121212; color: #888; }
             QPushButton { 
-                background-color: #2d2d2d; border: 1px solid #333; border-radius: 4px; padding: 6px 12px; font-weight: bold; color: #aaa; 
+                background-color: transparent; border: none; font-size: 18px; color: #888; padding: 2px 6px; border-radius: 4px;
             }
-            QPushButton:hover { background-color: #383838; border-color: #444; color: #eee; }
-            QComboBox, QLineEdit { background-color: #252525; border: 1px solid #333; border-radius: 4px; padding: 5px 10px; color: #fff; }
-            QComboBox:focus, QLineEdit:focus { border-color: #555; }
-            QCheckBox { spacing: 8px; font-size: 11px; color: #777; }
-            QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #333; border-radius: 2px; background-color: #252525; }
-            QCheckBox::indicator:checked { background-color: #ffffff; border-color: #ffffff; }
-            QCheckBox:hover { color: #eee; }
+            QPushButton:hover { background-color: #242424; color: #eee; }
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(10)
-
-        layout.setSpacing(10)
+        layout.setContentsMargins(10, 2, 10, 2)
+        layout.setSpacing(6)
         
         # Settings (Hamburger)
         self.btn_settings = QPushButton("☰")
@@ -139,6 +133,10 @@ class TopToolbar(QWidget):
 
         self.btn_add_folder = QPushButton(tr("add_folder"))
         self.btn_add_folder.clicked.connect(self.add_folder_requested.emit)
+        self.btn_catalogs = QPushButton("Каталоги")
+        self.btn_catalogs.clicked.connect(self.catalogs_requested.emit)
+        self.btn_hidden = QPushButton("Скрытые")
+        self.btn_hidden.clicked.connect(self.hidden_assets_requested.emit)
 
         self.btn_index = QPushButton(tr("index"))
         self.btn_index.clicked.connect(self.index_requested.emit)
@@ -150,8 +148,41 @@ class TopToolbar(QWidget):
         layout.addWidget(self.check_subfolders)
         layout.addWidget(self.check_no_textures)
         layout.addWidget(self.btn_add_folder)
+        layout.addWidget(self.btn_catalogs)
+        layout.addWidget(self.btn_hidden)
         layout.addWidget(self.btn_index)
-        layout.addWidget(self.btn_cleanup)
+        # Service controls are hosted inside the Catalog dialog / status bar
+        for control in (
+            self.parser_combo, self.url_input, self.btn_scrape,
+            self.btn_help,
+            self.check_ignore_deleted, self.check_subfolders, self.check_no_textures,
+            self.btn_add_folder, self.btn_catalogs, self.btn_hidden,
+            self.btn_index, self.btn_cleanup
+        ):
+            control.hide()
+
+    def show_import_dialog(self, parent=None):
+        if not hasattr(self, '_import_dialog'):
+            self._import_dialog = QDialog(parent)
+            self._import_dialog.setWindowTitle("Добавить с сайта")
+            self._import_dialog.resize(620, 160)
+            layout = QVBoxLayout(self._import_dialog)
+            note = QLabel("Выберите сайт и вставьте ссылку на проект. Ход загрузки отображается внизу основного окна.")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+            controls = QHBoxLayout()
+            self.url_input.setMinimumWidth(260)
+            self.url_input.setMaximumWidth(16777215)
+            for widget in (self.parser_combo, self.url_input, self.btn_scrape):
+                controls.addWidget(widget, 1 if widget is self.url_input else 0)
+                widget.show()
+            layout.addLayout(controls)
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            buttons.rejected.connect(self._import_dialog.hide)
+            layout.addWidget(buttons)
+        self._import_dialog.show()
+        self._import_dialog.raise_()
+        self._import_dialog.activateWindow()
 
     def set_status(self, text: str):
         self.status_label.setText(text)
@@ -199,7 +230,8 @@ class TopToolbar(QWidget):
         self.check_no_textures.setText(tr("no_textures"))
         self.btn_add_folder.setText(tr("add_folder"))
         self.btn_index.setText(tr("index"))
-        self.btn_cleanup.setText(tr("cleanup"))
+        self.btn_cleanup.setText("Проверить файлы")
+        self.btn_cleanup.setToolTip("Показать отсутствующие изображения и недоступные источники без удаления данных")
         
         # Tooltips
         self.btn_help.setToolTip(tr("help_modes"))
