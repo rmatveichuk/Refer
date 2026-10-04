@@ -816,8 +816,12 @@ class CollectionsPanel(QWidget):
                     QDesktopServices.openUrl(QUrl.fromLocalFile(str(synced)))
 
         elif action == act_export:
-            dlg = ExportCollectionDialog(cid, self.repository, self)
-            dlg.exec()
+            try:
+                dlg = ExportCollectionDialog(cid, self.repository, self)
+                dlg.exec()
+            except Exception as e:
+                logger.error(f"Ошибка открытия диалога экспорта: {e}", exc_info=True)
+                QMessageBox.warning(self, "Ошибка экспорта", f"Не удалось открыть окно экспорта:\n{e}")
 
         elif action == act_rename:
             dlg = QInputDialog(self)

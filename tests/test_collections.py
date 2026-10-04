@@ -252,6 +252,29 @@ class TestCollections(unittest.TestCase):
 
         panel.close()
 
+    def test_export_collection_dialog_init_and_toggle(self):
+        """Проверяет создание диалога экспорта и переключение форматов без ошибок."""
+        import sys
+        from PyQt6.QtWidgets import QApplication
+        from ui.export_collection_dialog import ExportCollectionDialog
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        cid = self.repo.create_collection("Export Dialog Test")
+        self.repo.add_assets(cid, [1, 2])
+
+        dlg = ExportCollectionDialog(cid, self.repo)
+        self.assertIsNotNone(dlg.mode_widget)
+        self.assertTrue(dlg.mode_widget.isHidden())  # web_html по умолчанию скрывает mode_widget
+        self.assertFalse(dlg.web_info_label.isHidden())
+
+        # Переключение на offline_html
+        idx = dlg.format_combo.findData("offline_html")
+        dlg.format_combo.setCurrentIndex(idx)
+        self.assertFalse(dlg.mode_widget.isHidden())
+        self.assertTrue(dlg.web_info_label.isHidden())
+
+        dlg.close()
+
 
 if __name__ == "__main__":
     unittest.main()
