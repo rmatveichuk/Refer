@@ -318,6 +318,26 @@ class GalleryView(QListView):
         
         # Check if multiple items are selected
         selected_indexes = self.selectionModel().selectedIndexes()
+
+        # Мудборды (коллекции)
+        repo = getattr(self.parent_window, 'collection_repo', None) if self.parent_window else None
+        if repo:
+            target_assets = [model.assets[idx.row()] for idx in selected_indexes] if len(selected_indexes) > 1 else [model.assets[index.row()]]
+            target_ids = [a.id for a in target_assets if a and a.id]
+            col_menu = menu.addMenu(f"📁 Добавить в мудборд ({len(target_ids)})" if len(target_ids) > 1 else "📁 Добавить в мудборд")
+            cols = repo.get_collections_with_counts()
+            target_id = repo.get_quick_target()
+            for c in cols:
+                cid = c["id"]
+                is_target = (cid == target_id)
+                prefix = "★ " if is_target else ""
+                act = col_menu.addAction(f"{prefix}{c['name']} ({c['asset_count']})")
+                act.triggered.connect(lambda checked, _cid=cid, _ids=target_ids: self._add_to_collection(_cid, _ids))
+            if cols:
+                col_menu.addSeparator()
+            act_new = col_menu.addAction("+ Новый мудборд…")
+            act_new.triggered.connect(lambda checked, _ids=target_ids: self._create_and_add_to_collection(_ids))
+            menu.addSeparator()
         
         if len(selected_indexes) > 1:
             selected_assets = [model.assets[idx.row()] for idx in selected_indexes]
@@ -404,3 +424,21 @@ class GalleryView(QListView):
             self.parent_window.start_batch_ai_analysis(assets)
         else:
             QMessageBox.information(self, "Анализ недоступен", "Откройте изображения в основном окне приложения.")
+
+    def _add_to_collection(self, collection_id: int, asset_ids: list):
+        if self.parent_window and hasattr(self.parent_window, "search_panel"):
+            self.parent_window.search_panel.collections_panel.add_assets_to_collection(collection_id, asset_ids)
+
+    def _create_and_add_to_collection(self, asset_ids: list):
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Новый мудборд", "Название подборки:")
+        if ok and name.strip():
+            repo = getattr(self.parent_window, 'collection_repo', None) if self.parent_window else None
+            if repo:
+                try:
+                    cid = repo.create_collection(name.strip(), ids=asset_ids)
+                    if self.parent_window and hasattr(self.parent_window, "search_panel"):
+                        self.parent_window.search_panel.collections_panel.reload()
+                        self.parent_window.status_label.setText(f"Создан мудборд '{name.strip()}' ({len(asset_ids)} кадров)")
+                except Exception as e:
+                    QMessageBox.warning(self, "Ошибка", str(e))

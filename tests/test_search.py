@@ -244,10 +244,10 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.gallery_model.assets, [])
         self.panel.update_custom_folders(list(self.panel.folder_items))
         self.assertEqual(self.panel.get_selected_sources(), [])
-        self.window.tabs.setCurrentIndex(1)
-        self.window.tabs.setCurrentIndex(0)
+        self.window._set_scope("favorites")
+        self.window._set_scope("all")
         self.assertEqual(self.panel.hybrid_input.text_input.text(), "БЮРО ТЕСТ")
-        self.assertEqual(self.window.tabs.count(), 2)
+        self.assertEqual(self.window.current_scope, "all")
 
     def test_partial_folder_selection_in_window(self):
         from PyQt6.QtCore import Qt

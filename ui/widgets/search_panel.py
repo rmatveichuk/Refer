@@ -14,6 +14,8 @@ from database.source_group_store import SourceGroupStore
 from ui.theme import get_indicator_stylesheet
 import config
 from database.db_manager import DatabaseManager
+from database.collection_repository import CollectionRepository
+from ui.widgets.collections_panel import CollectionsPanel
 
 
 class TagBubble(QFrame):
@@ -59,9 +61,10 @@ class SearchPanel(QWidget):
     manage_tags_requested = pyqtSignal()
     extract_tags_requested = pyqtSignal(str)
 
-    def __init__(self, parent=None, db=None, group_store=None):
+    def __init__(self, parent=None, db=None, group_store=None, collection_repo=None):
         super().__init__(parent)
         self.db = db or DatabaseManager(config.DB_PATH)
+        self.collection_repo = collection_repo or CollectionRepository(self.db)
         self.group_store = group_store or SourceGroupStore(db=self.db)
         self.source_assignments = {}
         self.disabled_sources = ()
@@ -175,46 +178,35 @@ class SearchPanel(QWidget):
         refinements_layout.setContentsMargins(0, 10, 0, 0)
         refinements_layout.setSpacing(6)
 
-        # Refinement checkboxes row (Избранное, Только ТОП)
-        quick_checks = QHBoxLayout()
-        quick_checks.setSpacing(12)
-        self.favorite_check = QCheckBox("Избранное")
+        # Invisible compatibility objects (active scope is controlled by top bar)
+        self.favorite_check = QCheckBox()
+        self.favorite_check.hide()
         self.favorite_check.toggled.connect(self._emit_search)
-        quick_checks.addWidget(self.favorite_check)
-
-        self.top_check = QCheckBox("Только ТОП")
-        self.top_check.setToolTip("Показывать только эталонную архитектуру из кураторского каталога ТОП")
+        self.top_check = QCheckBox()
+        self.top_check.hide()
         self.top_check.toggled.connect(self._emit_search)
-        quick_checks.addWidget(self.top_check)
-        quick_checks.addStretch()
-        refinements_layout.addLayout(quick_checks)
 
-        # Refinement buttons row (Теги, Условия/Фильтры, Сброс)
+        # Refinement buttons row (Теги на всю ширину + Сброс)
         refinements_buttons = QHBoxLayout()
-        refinements_buttons.setSpacing(4)
+        refinements_buttons.setSpacing(6)
 
         self.btn_manage_tags = QPushButton(tr('tags'))
         self.btn_manage_tags.setToolTip("Выбрать теги библиотеки. Число на кнопке — количество выбранных.")
-        self.btn_manage_tags.setStyleSheet("background-color: #1f1f1f; color: #eee; border: 1px solid #383838; border-radius: 4px; padding: 5px 8px; font-size: 11px;")
+        self.btn_manage_tags.setStyleSheet("background-color: #1f1f1f; color: #eee; border: 1px solid #383838; border-radius: 4px; padding: 6px 10px; font-size: 12px; font-weight: 500;")
         self.btn_manage_tags.clicked.connect(self.manage_tags_requested.emit)
         refinements_buttons.addWidget(self.btn_manage_tags, 1)
 
-        self.filters_button = QPushButton("Условия")
-        self.filters_button.setCheckable(True)
-        self.filters_button.setToolTip("Показать расширенные условия фильтрации тегов")
-        self.filters_button.setStyleSheet("""
-            QPushButton { background-color: #1f1f1f; color: #eee; border: 1px solid #383838; border-radius: 4px; padding: 5px 8px; font-size: 11px; }
-            QPushButton:checked { background-color: #333; border-color: #555; }
-        """)
-        self.filters_button.toggled.connect(self._on_filters_toggled)
-        refinements_buttons.addWidget(self.filters_button, 1)
-
         self.reset_filters_button = QPushButton("Сброс")
-        self.reset_filters_button.setToolTip("Сбросить все уточнения и оперативный выбор источников до всех включённых, сохранив поисковый запрос")
-        self.reset_filters_button.setStyleSheet("background-color: #222; color: #aaa; border: 1px solid #383838; border-radius: 4px; padding: 5px 8px; font-size: 11px;")
+        self.reset_filters_button.setToolTip("Сбросить все уточнения и восстановить все источники")
+        self.reset_filters_button.setStyleSheet("background-color: #222; color: #aaa; border: 1px solid #383838; border-radius: 4px; padding: 6px 10px; font-size: 11px;")
         self.reset_filters_button.clicked.connect(self.reset_filters)
         refinements_buttons.addWidget(self.reset_filters_button)
         refinements_layout.addLayout(refinements_buttons)
+
+        self.filters_button = QPushButton("Условия")
+        self.filters_button.setCheckable(True)
+        self.filters_button.toggled.connect(self._on_filters_toggled)
+        self.filters_button.hide()
 
         # Tag bubbles display area
         self.tags_widget = QWidget()
@@ -222,7 +214,7 @@ class SearchPanel(QWidget):
         self.tags_widget.hide()
         refinements_layout.addWidget(self.tags_widget)
 
-        # Collapsible Extra conditions (Filters widget)
+        # Extra conditions (Filters widget)
         self.filters_widget = QWidget()
         self.filters_layout = QVBoxLayout(self.filters_widget)
         self.filters_layout.setContentsMargins(0, 4, 0, 0)
@@ -231,12 +223,13 @@ class SearchPanel(QWidget):
         self.tag_match = QComboBox()
         self.tag_match.addItem("Любой из тегов", "any")
         self.tag_match.addItem("Все теги одновременно", "all")
+        self.tag_match.setCurrentIndex(1)
         self.tag_match.currentIndexChanged.connect(self._on_source_toggled)
         self.filters_layout.addWidget(self.tag_match)
 
         self.exclude_input = QLineEdit()
         self.exclude_input.setPlaceholderText("Исключить теги: wood, glass")
-        self.exclude_input.setToolTip("Исключаются записи с этими тегами. Отсутствие тега не гарантирует отсутствие материала на фото.")
+        self.exclude_input.setToolTip("Исключаются записи с этими тегами.")
         self.exclude_input.textEdited.connect(lambda _text: self._search_debounce.start())
         self.filters_layout.addWidget(self.exclude_input)
 
@@ -244,15 +237,33 @@ class SearchPanel(QWidget):
         refinements_layout.addWidget(self.filters_widget)
         main_layout.addWidget(self.library_widget)
 
+        # Block 3.5: Moodboards / Collections Block (МУДБОРДЫ)
+        self.collections_panel = CollectionsPanel(self.collection_repo, self)
+        main_layout.addWidget(self.collections_panel)
+
         # Block 4: Sources Tree Block (Источники)
         sources_header = QHBoxLayout()
         self.lbl_sources = QLabel(tr("sources"))
         sources_header.addWidget(self.lbl_sources, 1)
 
-        self.btn_catalogs = QToolButton()
-        self.btn_catalogs.setText("Каталоги…")
-        self.btn_catalogs.setMinimumWidth(86)
-        self.btn_catalogs.setToolTip("Центр управления каталогами, группами, сканированием и импортом")
+        self.btn_catalogs = QPushButton("⚙")
+        self.btn_catalogs.setFixedSize(26, 26)
+        self.btn_catalogs.setToolTip("Управление каталогами, папками и сайтами")
+        self.btn_catalogs.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #888;
+                border: 1px solid #333;
+                border-radius: 4px;
+                font-size: 13px;
+                padding-bottom: 2px;
+            }
+            QPushButton:hover {
+                background-color: #24272e;
+                color: #29b6f6;
+                border-color: #29b6f6;
+            }
+        """)
         self.btn_catalogs.clicked.connect(self.catalogs_requested.emit)
         sources_header.addWidget(self.btn_catalogs)
         main_layout.addLayout(sources_header)

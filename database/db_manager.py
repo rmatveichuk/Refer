@@ -140,6 +140,46 @@ class DatabaseManager:
             except sqlite3.OperationalError:
                 pass
 
+            # --- Миграция: Мудборды / Наборы (Collections) ---
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS collections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    name_key TEXT NOT NULL UNIQUE,
+                    description TEXT DEFAULT '',
+                    cover_asset_id INTEGER DEFAULT NULL,
+                    export_dir TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (cover_asset_id) REFERENCES assets(id) ON DELETE SET NULL
+                )
+            ''')
+
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS collection_assets (
+                    collection_id INTEGER NOT NULL,
+                    asset_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    is_cover INTEGER NOT NULL DEFAULT 0,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (collection_id, asset_id),
+                    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+                )
+            ''')
+
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_collection_assets_col ON collection_assets(collection_id, position)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_collection_assets_asset ON collection_assets(asset_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_collections_name_key ON collections(name_key)')
+
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS quick_target (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                    collection_id INTEGER REFERENCES collections(id) ON DELETE SET NULL
+                )
+            ''')
+            conn.execute('INSERT OR IGNORE INTO quick_target (singleton, collection_id) VALUES (1, NULL)')
+
             conn.commit()
 
     # === Tag operations ===

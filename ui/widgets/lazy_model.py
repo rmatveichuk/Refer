@@ -163,17 +163,21 @@ class AssetListModel(QAbstractListModel):
         return None
 
     def mimeTypes(self) -> List[str]:
-        return ["text/uri-list"]
+        return ["text/uri-list", "application/x-refer-asset-ids"]
 
     def supportedDragActions(self):
         return Qt.DropAction.CopyAction
 
     def mimeData(self, indexes: List[QModelIndex]) -> QMimeData:
+        import json
         mime_data = QMimeData()
         urls = []
+        asset_ids = []
         for index in indexes:
             if index.isValid() and 0 <= index.row() < self.rowCount():
                 asset = self.assets[index.row()]
+                if asset and asset.id:
+                    asset_ids.append(asset.id)
                 # Prefer local_path for full resolution, fallback to thumbnail
                 path = asset.local_path if asset.local_path else asset.thumbnail_path
                 if path:
@@ -182,6 +186,8 @@ class AssetListModel(QAbstractListModel):
                         urls.append(QUrl.fromLocalFile(os.path.abspath(path)))
         
         mime_data.setUrls(urls)
+        if asset_ids:
+            mime_data.setData("application/x-refer-asset-ids", json.dumps(asset_ids).encode("utf-8"))
         return mime_data
 
     def completeImage(self, asset_id: int, generation: int, pixmap: QPixmap | None):

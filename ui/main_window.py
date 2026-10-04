@@ -1,15 +1,16 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QVBoxLayout, QDialog, QHBoxLayout, QWidget, QMessageBox, QPushButton, 
     QLabel, QProgressBar, QTabWidget, QTableView, QHeaderView, 
-    QAbstractItemView, QMenu, QApplication, QSlider, QToolButton
+    QAbstractItemView, QMenu, QApplication, QSlider, QToolButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSlot, QTimer, QRunnable, QObject, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QShortcut, QKeySequence
 
 from ui.widgets.gallery_view import GalleryView
 from ui.widgets.lazy_model import AssetListModel
 from ui.widgets.top_toolbar import TopToolbar
 from ui.widgets.search_panel import SearchPanel
+from database.collection_repository import CollectionRepository
 from database.search_repository import SearchRepository, SearchFilters
 from ui.workers.search_worker import SearchWorker, embedding_key
 from ui.workers.results_worker import ResultsWorker
@@ -205,8 +206,13 @@ class MainWindow(QMainWindow):
         content_layout.setSpacing(0)
         main_layout.addWidget(content_widget, 1)
 
+        # --- Collections & Scope State ---
+        self.collection_repo = CollectionRepository(self.db)
+        self.current_scope = "all"  # "all", "favorites", "top"
+        self.current_collection_id: Optional[int] = None
+
         # --- Left: Search Panel ---
-        self.search_panel = SearchPanel(db=self.db, group_store=self.group_store)
+        self.search_panel = SearchPanel(db=self.db, group_store=self.group_store, collection_repo=self.collection_repo)
         self.search_panel.search_triggered.connect(self._update_breadcrumbs)
         self.search_panel.manage_tags_requested.connect(self._open_tag_manager)
         self.search_panel.extract_tags_requested.connect(self._extract_tags_from_image)
@@ -216,74 +222,163 @@ class MainWindow(QMainWindow):
         self.search_panel.catalogs_requested.connect(self._open_catalogs)
         self.filters_button = self.search_panel.filters_button
         self.reset_filters_button = self.search_panel.reset_filters_button
+
+        # Wire up collections panel
+        self.search_panel.collections_panel.collectionSelected.connect(self._on_collection_selected)
+        self.search_panel.collections_panel.collectionCleared.connect(self._on_collection_cleared)
+        self.search_panel.collections_panel.contentsChanged.connect(self._on_collection_contents_changed)
+        self.search_panel.collections_panel.statusNotice.connect(lambda msg: self.status_label.setText(msg))
+
+        # Shortcut Ctrl+B for quick add into active moodboard
+        self.shortcut_quick_add = QShortcut(QKeySequence("Ctrl+B"), self)
+        self.shortcut_quick_add.activated.connect(self._quick_add_selected_to_collection)
+
         self._setup_catalog_menu()
-        self.search_panel.btn_catalogs.setMenu(self.catalog_menu)
-        self.search_panel.btn_catalogs.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         content_layout.addWidget(self.search_panel)
 
-        # --- Right: Gallery & Library Tabs ---
-        self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; border-left: 1px solid #222; }
-            QTabBar::tab { background: #1a1a1a; color: #777; padding: 10px 20px; border: none; border-bottom: 2px solid transparent; }
-            QTabBar::tab:hover { color: #aaa; background: #222; }
-            QTabBar::tab:selected { background: #222; color: #fff; border-bottom: 2px solid #fff; font-weight: bold; }
-        """)
-        
-        # Gallery and table share one query and one set of results.
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-        self._previous_tab_index = 0
+        # --- Right: Results & Gallery Area ---
         results_widget = QWidget()
         results_layout = QVBoxLayout(results_widget)
-        results_layout.setContentsMargins(10, 6, 10, 6)
-        results_layout.setSpacing(4)
-        heading = QHBoxLayout()
-        self.result_title = QLabel("Референсы")
-        self.result_title.setStyleSheet("font-size: 18px; color: #e4e8df;")
-        heading.addWidget(self.result_title)
-        self.result_count = QLabel()
-        self.result_count.setStyleSheet("color: #959b91;")
-        heading.addWidget(self.result_count)
-        heading.addStretch()
-        results_layout.addLayout(heading)
-        content_layout.addWidget(results_widget, 1)
+        results_layout.setContentsMargins(12, 8, 12, 8)
+        results_layout.setSpacing(6)
 
-        # --- Breadcrumbs as Corner Widget ---
-        self.breadcrumbs_widget = QWidget()
-        self.breadcrumbs_layout = FlowLayout(self.breadcrumbs_widget)
-        self.breadcrumbs_layout.setContentsMargins(10, 0, 10, 0)
-        self.breadcrumbs_widget.hide()
-        results_layout.addWidget(self.breadcrumbs_widget)
+        # 1. Top Header Row: Title, Scope Bar, Controls
+        heading = QHBoxLayout()
+        heading.setSpacing(8)
+
+        self.result_title = QLabel("Референсы")
+        self.result_title.setStyleSheet("font-size: 17px; font-weight: bold; color: #e4e8df;")
+        heading.addWidget(self.result_title)
+
+        self.result_count = QLabel()
+        self.result_count.setStyleSheet("color: #888; font-size: 13px;")
+        heading.addWidget(self.result_count)
+
+        heading.addSpacing(16)
+
+        # Top Scope Segmented Bar: [ Все ] [ Избранное ] [ ТОП ]
+        self.scope_group = QButtonGroup(self)
+        self.scope_group.setExclusive(True)
+
+        scope_widget = QWidget()
+        scope_layout = QHBoxLayout(scope_widget)
+        scope_layout.setContentsMargins(0, 0, 0, 0)
+        scope_layout.setSpacing(2)
+
+        self.btn_scope_all = QPushButton("Все")
+        self.btn_scope_favorites = QPushButton("Избранное")
+        self.btn_scope_top = QPushButton("ТОП")
+
+        scope_btn_style = """
+            QPushButton {
+                background-color: #17181c;
+                color: #808692;
+                border: 1px solid #2d3038;
+                padding: 4px 14px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #22252c;
+                color: #e0e0e0;
+            }
+            QPushButton:checked {
+                background-color: #262c37;
+                color: #ffffff;
+                border-color: #2196F3;
+                font-weight: bold;
+            }
+        """
+
+        for btn, scope_name in [(self.btn_scope_all, "all"), (self.btn_scope_favorites, "favorites"), (self.btn_scope_top, "top")]:
+            btn.setCheckable(True)
+            btn.setStyleSheet(scope_btn_style)
+            self.scope_group.addButton(btn)
+            scope_layout.addWidget(btn)
+            btn.clicked.connect(lambda checked, s=scope_name: self._set_scope(s))
+
+        self.btn_scope_all.setChecked(True)
+        heading.addWidget(scope_widget)
+
+        heading.addStretch()
+
+        # Viewport controls: size slider, select all, hide
         controls_widget = QWidget()
         controls = QHBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(6)
+
         controls.addWidget(QLabel("Размер"))
         self.thumbnail_size = QSlider(Qt.Orientation.Horizontal)
         self.thumbnail_size.setRange(140, 320)
         self.thumbnail_size.setValue(220)
-        self.thumbnail_size.setFixedWidth(100)
+        self.thumbnail_size.setFixedWidth(85)
         self.thumbnail_size.valueChanged.connect(lambda size: self.gallery.set_thumbnail_size(size))
         controls.addWidget(self.thumbnail_size)
+
         self.select_all_button = QPushButton(tr("select_all"))
         self.select_all_button.clicked.connect(self._select_all_gallery)
         controls.addWidget(self.select_all_button)
+
         self.delete_button = QPushButton(tr("hide"))
         self.delete_button.clicked.connect(self._delete_selected_gallery)
         controls.addWidget(self.delete_button)
-        self.tabs.setCornerWidget(controls_widget, Qt.Corner.TopRightCorner)
-        results_layout.addWidget(self.tabs, 1)
+
+        heading.addWidget(controls_widget)
+        results_layout.addLayout(heading)
+
+        # 2. Breadcrumbs
+        self.breadcrumbs_widget = QWidget()
+        self.breadcrumbs_layout = FlowLayout(self.breadcrumbs_widget)
+        self.breadcrumbs_layout.setContentsMargins(0, 2, 0, 2)
+        self.breadcrumbs_widget.hide()
+        results_layout.addWidget(self.breadcrumbs_widget)
+
+        # 3. Main Gallery View
+        self.gallery = GalleryView()
+        self.gallery_model = AssetListModel()
+        self.gallery.setModel(self.gallery_model)
+        self.gallery.db = self.db
+        self.gallery.parent_window = self
+        results_layout.addWidget(self.gallery, 1)
+
+        # Dummy table for compatibility
+        self.library_table = QTableView()
+        self.library_table.hide()
+
         self.more_button = QPushButton(f"Показать ещё {config.SEARCH_PAGE_SIZE}")
         self.more_button.clicked.connect(self._show_more_results)
         self.more_button.hide()
         results_layout.addWidget(self.more_button)
 
-        self._setup_gallery_tab()
-        self._setup_library_tab()
-        
+        content_layout.addWidget(results_widget, 1)
+
         self.retranslate_ui()
 
+    def _set_scope(self, scope: str):
+        if self.current_scope == scope:
+            return
+        self.current_scope = scope
+        self.btn_scope_all.setChecked(scope == "all")
+        self.btn_scope_favorites.setChecked(scope == "favorites")
+        self.btn_scope_top.setChecked(scope == "top")
+        self._update_breadcrumbs()
+
+    def _on_collection_selected(self, collection_id: int):
+        self.current_collection_id = collection_id
+        col = self.collection_repo.get_collection(collection_id)
+        if col:
+            self.result_title.setText(f"Набор: {col['name']}")
+        self._update_breadcrumbs()
+
+    def _on_collection_cleared(self):
+        self.current_collection_id = None
+        self.result_title.setText("Референсы")
+        self._update_breadcrumbs()
+
     def _setup_catalog_menu(self):
-        self.catalog_menu = QMenu(self.search_panel.btn_catalogs)
+        self.catalog_menu = QMenu(self)
         self.catalog_menu.addAction("Управление каталогами…", self._open_catalogs)
         self.catalog_menu.addAction("Добавить папку…", self.top_toolbar.btn_add_folder.click)
         self.catalog_menu.addAction("Добавить с сайта…", lambda: self.top_toolbar.show_import_dialog(self))
@@ -300,93 +395,37 @@ class MainWindow(QMainWindow):
 
         self.catalog_menu.aboutToShow.connect(refresh_actions)
         maintenance.aboutToShow.connect(refresh_actions)
-        self.search_panel.btn_catalogs.setMenu(self.catalog_menu)
 
-    def _on_tab_changed(self, index):
-        # Changing presentation does not alter the query or filters.
-        self._previous_tab_index = index
+    def _on_collection_contents_changed(self):
+        if self.current_collection_id is not None:
+            self._update_breadcrumbs()
+
+    def _quick_add_selected_to_collection(self):
+        indexes = self.gallery.selectionModel().selectedIndexes()
+        if not indexes:
+            self.status_label.setText("Сначала выделите изображения в галерее для добавления (Ctrl+B)")
+            return
+        selected_assets = [self.gallery_model.assets[idx.row()] for idx in indexes if idx.row() < len(self.gallery_model.assets)]
+        ids = [a.id for a in selected_assets if a and a.id]
+        if ids:
+            self.search_panel.collections_panel.quick_add(ids)
 
     def _select_all_gallery(self):
-        (self.gallery if self.tabs.currentIndex() == 0 else self.library_table).selectAll()
+        self.gallery.selectAll()
 
     def _delete_selected_gallery(self):
-        if self.tabs.currentIndex() == 0:
-            indexes = self.gallery.selectionModel().selectedIndexes()
-            assets = [self.gallery_model.assets[index.row()] for index in indexes]
-        else:
-            rows = self.library_table.selectionModel().selectedRows()
-            selected = {int(self.library_table.model().item(index.row(), 0).text()) for index in rows}
-            assets = [asset for asset in self.gallery_model.assets if asset.id in selected]
+        indexes = self.gallery.selectionModel().selectedIndexes()
+        assets = [self.gallery_model.assets[index.row()] for index in indexes if index.row() < len(self.gallery_model.assets)]
         if not assets:
             QMessageBox.information(self, "Ничего не выбрано", "Выделите изображения для удаления.")
             return
         self._delete_assets_batch(assets)
 
-    def _filter_favorites(self):
-        self.search_panel.favorite_check.setChecked(not self.search_panel.favorite_check.isChecked())
-
-    def _setup_gallery_tab(self):
-        gallery_tab = QWidget()
-        gallery_layout = QVBoxLayout(gallery_tab)
-        gallery_layout.setContentsMargins(0, 0, 0, 0)
-        gallery_layout.setSpacing(0)
-
-        self.gallery = GalleryView()
-        self.gallery_model = AssetListModel()
-        self.gallery.setModel(self.gallery_model)
-        self.gallery.db = self.db
-        self.gallery.parent_window = self
-        
-        gallery_layout.addWidget(self.gallery)
-        self.tabs.addTab(gallery_tab, tr("gallery"))
-
-    def _setup_library_tab(self):
-        library_tab = QWidget()
-        library_layout = QVBoxLayout(library_tab)
-        library_layout.setContentsMargins(8, 8, 8, 8)
-
-        self.library_table = QTableView()
-        self.library_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.library_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.library_table.horizontalHeader().setStretchLastSection(True)
-        self.library_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.library_table.setAlternatingRowColors(True)
-        self.library_table.setStyleSheet("""
-            QTableView { background-color: #121212; color: #e0e0e0; border: 1px solid #333; gridline-color: #2a2a2a; }
-            QHeaderView::section { background-color: #1e1e1e; color: #29b6f6; border: none; padding: 6px; font-weight: bold; }
-            QTableView::item { padding: 4px; }
-            QTableView::item:selected { background-color: #29b6f6; color: #000; }
-        """)
-        self.library_table.doubleClicked.connect(self._on_library_doubleclick)
-        self.library_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.library_table.customContextMenuRequested.connect(self._show_library_context_menu)
-
-        library_layout.addWidget(self.library_table)
-        self.tabs.addTab(library_tab, tr("table"))
-
-    def _delete_assets_batch(self, assets: list):
-        """Compatibility entry point: reversible hiding, never physical deletion."""
-        ids = list(dict.fromkeys(asset.id for asset in assets if asset.id is not None))
-        if not ids:
-            return False
-        rows = []
-        try:
-            with self.db.get_connection() as conn:
-                for start in range(0, len(ids), 500):
-                    chunk = ids[start:start + 500]
-                    placeholders = ",".join("?" for _ in chunk)
-                    rows.extend(dict(row) for row in conn.execute(f"SELECT * FROM assets WHERE id IN ({placeholders})", chunk))
-        except Exception as error:
-            QMessageBox.critical(self, "Скрытие не выполнено", "Не удалось прочитать изображения: " + str(error))
-            return False
-        if not rows:
-            return False
-
+    def _confirm_hide(self, n: int) -> bool:
         parent_window = QApplication.activeWindow() or self
         msg_box = QMessageBox(parent_window)
         msg_box.setIcon(QMessageBox.Icon.Question)
 
-        n = len(rows)
         if config.CURRENT_LANGUAGE == "ru":
             msg_box.setWindowTitle("Скрыть изображения")
             if 11 <= (n % 100) <= 19:
@@ -449,7 +488,27 @@ class MainWindow(QMainWindow):
         yes_btn.setFocus()
 
         msg_box.exec()
-        if msg_box.clickedButton() != yes_btn:
+        return msg_box.clickedButton() == yes_btn
+
+    def _delete_assets_batch(self, assets: list):
+        """Compatibility entry point: reversible hiding, never physical deletion."""
+        ids = list(dict.fromkeys(asset.id for asset in assets if asset.id is not None))
+        if not ids:
+            return False
+        rows = []
+        try:
+            with self.db.get_connection() as conn:
+                for start in range(0, len(ids), 500):
+                    chunk = ids[start:start + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    rows.extend(dict(row) for row in conn.execute(f"SELECT * FROM assets WHERE id IN ({placeholders})", chunk))
+        except Exception as error:
+            QMessageBox.critical(self, "Скрытие не выполнено", "Не удалось прочитать изображения: " + str(error))
+            return False
+        if not rows:
+            return False
+
+        if not self._confirm_hide(len(rows)):
             return False
         try:
             self.visibility.hide(rows)
@@ -740,9 +799,10 @@ class MainWindow(QMainWindow):
                 self._delete_assets_batch([asset])
 
     def retranslate_ui(self):
-        self.tabs.blockSignals(True)
-        self.tabs.setTabText(0, tr("gallery"))
-        self.tabs.setTabText(1, tr("table"))
+        self.btn_scope_all.setText("Все" if config.CURRENT_LANGUAGE == "ru" else "All")
+        self.btn_scope_favorites.setText("Избранное" if config.CURRENT_LANGUAGE == "ru" else "Favorites")
+        self.btn_scope_top.setText("ТОП" if config.CURRENT_LANGUAGE == "ru" else "TOP")
+
         self.select_all_button.setText(tr("select_all"))
         self.delete_button.setText(tr("hide"))
         
@@ -752,8 +812,6 @@ class MainWindow(QMainWindow):
         
         if self._settings_dialog:
             self._settings_dialog.retranslate_ui()
-            
-        self.tabs.blockSignals(False)
 
     def _open_settings(self):
         self._settings_dialog = SettingsDialog(self)
@@ -1177,12 +1235,16 @@ class MainWindow(QMainWindow):
         if getattr(self, 'filter_author', None):
             add_text_crumb(f"👤 {self.filter_author}", 'author')
 
-        # 6. Favorites Filter
-        if self.search_panel.favorite_check.isChecked():
-            add_text_crumb("★ Избранное", 'favorites')
+        # 3. Collection Filter
+        if getattr(self, 'current_collection_id', None) is not None:
+            col = self.collection_repo.get_collection(self.current_collection_id)
+            c_name = col['name'] if col else f"Набор #{self.current_collection_id}"
+            add_text_crumb(f"📁 {c_name}", 'collection')
 
-        # 7. Top Filter
-        if self.search_panel.top_check.isChecked():
+        # 6. Scope Filter (Favorites / TOP)
+        if self.current_scope == "favorites":
+            add_text_crumb("★ Избранное", 'favorites')
+        elif self.current_scope == "top":
             add_text_crumb("🏆 ТОП", 'top')
 
         # Trigger the actual search
@@ -1208,22 +1270,33 @@ class MainWindow(QMainWindow):
             self.filter_author = None
         elif filter_type == 'exclude':
             self.search_panel.exclude_input.setText(", ".join(t for t in self.search_panel.excluded_tags() if t != value))
-        elif filter_type == 'favorites':
-            self.search_panel.favorite_check.setChecked(False)
-        elif filter_type == 'top':
-            self.search_panel.top_check.setChecked(False)
+        elif filter_type == 'collection':
+            self.search_panel.collections_panel.clear_selection()
+            return
+        elif filter_type in ('favorites', 'top'):
+            self._set_scope("all")
+            return
         
         self._update_breadcrumbs() # Re-emit search
 
     def _current_filters(self):
         panel = self.search_panel
-        return SearchFilters(sources=tuple(self.search_sources), section="all",
-                             excluded_sources=panel.get_excluded_sources(),
-                             tags=tuple(self.search_tags), exclude_tags=panel.excluded_tags(),
-                             tag_match=panel.tag_match.currentData(), favorites=panel.favorite_check.isChecked(),
-                             top_only=panel.top_check.isChecked(),
-                             plants_only=False,
-                             project_id=self.filter_project_id, author=self.filter_author)
+        is_favorites = (self.current_scope == "favorites")
+        is_top = (self.current_scope == "top")
+        return SearchFilters(
+            sources=tuple(self.search_sources),
+            section="all",
+            excluded_sources=panel.get_excluded_sources(),
+            tags=tuple(self.search_tags),
+            exclude_tags=panel.excluded_tags(),
+            tag_match=panel.tag_match.currentData() if hasattr(panel, 'tag_match') else "all",
+            favorites=is_favorites,
+            top_only=is_top,
+            plants_only=False,
+            project_id=self.filter_project_id,
+            author=self.filter_author,
+            collection_id=self.current_collection_id
+        )
 
     def _perform_visual_search(self, text, img_path, threshold, sources, tags=None):
         # Invalidate an in-flight filtering result even before a new embedding is ready.
@@ -1234,7 +1307,15 @@ class MainWindow(QMainWindow):
         self.search_tags = list(tags or [])
         self.result_limit = config.SEARCH_PAGE_SIZE
         self.more_button.hide()
-        self.result_title.setText("Эталонный ТОП" if self.search_panel.top_check.isChecked() else "Референсы")
+        if self.current_collection_id:
+            col = self.collection_repo.get_collection(self.current_collection_id)
+            self.result_title.setText(f"Набор: {col['name']}" if col else "Набор")
+        elif self.current_scope == "top":
+            self.result_title.setText("Эталонный ТОП")
+        elif self.current_scope == "favorites":
+            self.result_title.setText("Избранное")
+        else:
+            self.result_title.setText("Референсы")
         if (not text and not img_path) or self.search_panel.text_mode.currentData() == "metadata":
             self._requested_search = None
             self.progress_bar.hide()

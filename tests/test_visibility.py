@@ -90,7 +90,7 @@ class VisibilityWindowTests(unittest.TestCase):
         before = list(self.db.conn.iterdump())
         ids = self.window.faiss_mgr.get_all_ids().tolist()
         asset = next(asset for asset in self.window.gallery_model.assets if asset.id == 1)
-        with patch("ui.main_window.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes):
+        with patch.object(self.window, "_confirm_hide", return_value=True):
             self.assertTrue(self.window._delete_assets_batch([asset]))
         self.panel._clear_all()
         self.panel.reset_filters()
@@ -105,7 +105,7 @@ class VisibilityWindowTests(unittest.TestCase):
 
     def test_failed_hide_has_no_success_and_does_not_change_gallery(self):
         before = {asset.id for asset in self.window.gallery_model.assets}
-        with patch("ui.main_window.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes), \
+        with patch.object(self.window, "_confirm_hide", return_value=True), \
              patch.object(self.window.visibility, "hide", side_effect=RuntimeError("fixture write failure")), \
              patch("ui.main_window.QMessageBox.critical"):
             self.assertFalse(self.window._delete_assets_batch(self.window.gallery_model.assets[:1]))

@@ -183,6 +183,11 @@ class ImageViewerWindow(QMainWindow):
         self.btn_fav.clicked.connect(self._toggle_favorite)
         toolbar.addWidget(self.btn_fav)
 
+        self.btn_moodboard = QPushButton("📁 В мудборд")
+        self.btn_moodboard.setToolTip("Добавить кадр в мудборд (Ctrl+B — в быстрый набор)")
+        self.btn_moodboard.clicked.connect(self._show_moodboard_menu)
+        toolbar.addWidget(self.btn_moodboard)
+
         self.btn_ai = QPushButton("🤖 ИИ-Анализ")
         self.btn_ai.clicked.connect(self._trigger_ai_analysis)
         toolbar.addWidget(self.btn_ai)
@@ -421,6 +426,8 @@ class ImageViewerWindow(QMainWindow):
             self.status.showMessage("⏳ Отправлено на ИИ-анализ...", 3000)
 
     def _delete_current_asset(self):
+        if not self.btn_delete.isEnabled():
+            return
         if self.current_index < 0 or not self.parent_window: return
         asset = self.assets[self.current_index]
         
@@ -447,8 +454,82 @@ class ImageViewerWindow(QMainWindow):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(50, self.viewer.fit_in_view)
 
+    def _show_moodboard_menu(self):
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+        repo = getattr(self.parent_window, 'collection_repo', None) if self.parent_window else None
+        if not repo:
+            return
+
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background-color: #1c1c1c; color: #ddd; border: 1px solid #333; padding: 4px; }
+            QMenu::item { padding: 6px 20px; border-radius: 3px; }
+            QMenu::item:selected { background-color: #007acc; color: #fff; }
+            QMenu::separator { height: 1px; background: #333; margin: 4px 8px; }
+        """)
+
+        cols = repo.get_collections_with_counts()
+        target_id = repo.get_quick_target()
+        for c in cols:
+            cid = c["id"]
+            is_target = (cid == target_id)
+            prefix = "★ " if is_target else ""
+            act = menu.addAction(f"{prefix}{c['name']} ({c['asset_count']})")
+            act.triggered.connect(lambda checked, _cid=cid: self._add_current_to_collection(_cid))
+
+        if cols:
+            menu.addSeparator()
+
+        act_new = menu.addAction("+ Новый мудборд…")
+        act_new.triggered.connect(self._create_and_add_current)
+
+        pos = self.btn_moodboard.mapToGlobal(self.btn_moodboard.rect().bottomLeft())
+        menu.exec(pos)
+
+    def _add_current_to_collection(self, collection_id: int):
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+        asset = self.assets[self.current_index]
+        if self.parent_window and hasattr(self.parent_window, "search_panel"):
+            self.parent_window.search_panel.collections_panel.add_assets_to_collection(collection_id, [asset.id])
+            self.status.showMessage("✓ Добавлено в мудборд", 3000)
+
+    def _create_and_add_current(self):
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+        asset = self.assets[self.current_index]
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Новый мудборд", "Название подборки:")
+        if ok and name.strip():
+            repo = getattr(self.parent_window, 'collection_repo', None) if self.parent_window else None
+            if repo:
+                try:
+                    repo.create_collection(name.strip(), ids=[asset.id])
+                    if self.parent_window and hasattr(self.parent_window, "search_panel"):
+                        self.parent_window.search_panel.collections_panel.reload()
+                    self.status.showMessage(f"✓ Создан мудборд '{name.strip()}'", 3000)
+                except Exception as e:
+                    QMessageBox.warning(self, "Ошибка", str(e))
+
+    def _quick_add_current(self):
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+        asset = self.assets[self.current_index]
+        if self.parent_window and hasattr(self.parent_window, "search_panel"):
+            self.parent_window.search_panel.collections_panel.quick_add([asset.id])
+            repo = getattr(self.parent_window, 'collection_repo', None)
+            target = repo.get_quick_target_record() if repo else None
+            if target:
+                self.status.showMessage(f"✓ Добавлено в быстрый мудборд: {target['name']}", 3000)
+
     def keyPressEvent(self, event: QKeyEvent):
         self._key_pressed = True
+        if (event.modifiers() & Qt.KeyboardModifier.ControlModifier) and event.key() == Qt.Key.Key_B:
+            self._quick_add_current()
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_Escape:
             self.close()
         elif event.key() == Qt.Key.Key_Left:

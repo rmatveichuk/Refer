@@ -41,6 +41,7 @@ class SearchFilters:
     plants_only: bool = False
     project_id: int | None = None
     author: str | None = None
+    collection_id: int | None = None
 
 
 def like_prefix(path):
@@ -60,7 +61,7 @@ def transliterate_ru(text: str) -> str:
 
 
 class SearchRepository:
-    def __init__(self, db, faiss_manager, assignments=None, visibility_store=None):
+    def __init__(self, db, faiss_manager=None, assignments=None, visibility_store=None):
         self.db = db
         self.faiss = faiss_manager
         self.assignments = assignments or {}
@@ -86,6 +87,9 @@ class SearchRepository:
         if filters.author:
             conditions.append("p.author = ?")
             params.append(filters.author)
+        if filters.collection_id is not None:
+            conditions.append("EXISTS (SELECT 1 FROM collection_assets ca WHERE ca.asset_id = a.id AND ca.collection_id = ?)")
+            params.append(filters.collection_id)
         if filters.favorites:
             conditions.append("a.is_favorite = 1")
         if filters.top_only:
