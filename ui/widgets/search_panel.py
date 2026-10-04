@@ -246,17 +246,19 @@ class SearchPanel(QWidget):
         self.lbl_sources = QLabel(tr("sources"))
         sources_header.addWidget(self.lbl_sources, 1)
 
-        self.btn_catalogs = QPushButton("⚙")
+        self.btn_catalogs = QPushButton("⋯")
         self.btn_catalogs.setFixedSize(26, 26)
         self.btn_catalogs.setToolTip("Управление каталогами, папками и сайтами")
         self.btn_catalogs.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
-                color: #888;
+                color: #9aa0a6;
                 border: 1px solid #333;
                 border-radius: 4px;
-                font-size: 13px;
-                padding-bottom: 2px;
+                font-size: 16px;
+                font-weight: bold;
+                padding-bottom: 4px;
+                line-height: 1;
             }
             QPushButton:hover {
                 background-color: #24272e;

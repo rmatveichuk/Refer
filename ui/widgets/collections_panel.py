@@ -5,13 +5,15 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSignalBlocker, QUrl
-from PyQt6.QtGui import QIcon, QPixmap, QColor, QFont, QDesktopServices
+from PyQt6.QtCore import Qt, QSize, QPointF, pyqtSignal, QSignalBlocker, QUrl
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QFont, QDesktopServices, QPainter, QPolygonF, QPen
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QMenu, QInputDialog, QMessageBox,
     QAbstractItemView, QFileDialog
 )
+
+import math
 
 from database.collection_repository import CollectionRepository
 from ui.export_collection_dialog import ExportCollectionDialog
@@ -20,6 +22,87 @@ from export.moodboard_exporter import sync_collection_web_moodboard
 logger = logging.getLogger(__name__)
 
 MIME_ASSET_IDS = "application/x-refer-asset-ids"
+
+
+def _create_star_icon(color: str, size: int = 32) -> QIcon:
+    """Создаёт геометрически выверенную, правильную пятиконечную звезду."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    poly = QPolygonF()
+    cx, cy = size / 2.0, size / 2.0
+    r_out = size * 0.40
+    r_in = r_out * 0.40
+    for i in range(10):
+        r = r_out if i % 2 == 0 else r_in
+        angle = -math.pi / 2 + i * math.pi / 5
+        poly.append(QPointF(cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    p.setBrush(QColor(color))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawPolygon(poly)
+    p.end()
+    return QIcon(pix)
+
+
+def _create_cross_icon(color: str, size: int = 32) -> QIcon:
+    """Создаёт аккуратный геометрический крестик без искажения шрифта."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(color))
+    pen.setWidthF(2.0)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    cx, cy = size / 2.0, size / 2.0
+    d = size * 0.22
+    p.drawLine(QPointF(cx - d, cy - d), QPointF(cx + d, cy + d))
+    p.drawLine(QPointF(cx - d, cy + d), QPointF(cx + d, cy - d))
+    p.end()
+    return QIcon(pix)
+
+
+class ActionButton(QPushButton):
+    """Инлайн-кнопка действия с чистой векторной иконкой и подсветкой при наведении."""
+
+    def __init__(self, normal_icon: QIcon, hover_icon: QIcon, tooltip: str, parent=None):
+        super().__init__(parent)
+        self._normal_icon = normal_icon
+        self._hover_icon = hover_icon
+        self.setFixedSize(26, 26)
+        self.setIconSize(QSize(18, 18))
+        self.setIcon(self._normal_icon)
+        self.setToolTip(tooltip)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAcceptDrops(False)
+        self.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 0;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.08);
+            }
+        """)
+
+    def set_icons(self, normal_icon: QIcon, hover_icon: QIcon, tooltip: Optional[str] = None):
+        self._normal_icon = normal_icon
+        self._hover_icon = hover_icon
+        self.setIcon(normal_icon)
+        if tooltip:
+            self.setToolTip(tooltip)
+
+    def enterEvent(self, event):
+        self.setIcon(self._hover_icon)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setIcon(self._normal_icon)
+        super().leaveEvent(event)
 
 
 class CollectionRowWidget(QWidget):
@@ -51,8 +134,8 @@ class CollectionRowWidget(QWidget):
 
     def _init_ui(self, thumb_path: Optional[str]):
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(7)
+        layout.setContentsMargins(5, 3, 5, 3)
+        layout.setSpacing(8)
 
         # 1. Cover Thumbnail (32x32)
         self.thumb_label = QLabel()
@@ -87,68 +170,22 @@ class CollectionRowWidget(QWidget):
         text_layout.addWidget(self.count_label)
         text_layout.addStretch()
 
-        # 3. Action Buttons (Discreet dark-gray #555555 / #666666)
-        self.btn_star = QPushButton("★")
-        self.btn_star.setFixedSize(22, 22)
-        self.btn_star.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.btn_star.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_star.setAcceptDrops(False)
-
+        # 3. Action Buttons (Discreet dark-gray #5c606a, larger 26x26 vector geometry)
         if self.is_quick_target:
-            self.btn_star.setToolTip("Активный Quick Target (Ctrl+B)\nНажмите, чтобы снять")
-            self.btn_star.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    border-radius: 3px;
-                    color: #ffca28;
-                    font-size: 13px;
-                    padding-bottom: 1px;
-                }
-                QPushButton:hover {
-                    color: #ffe082;
-                    background-color: rgba(255, 213, 79, 0.2);
-                }
-            """)
+            star_normal = _create_star_icon("#ffca28")
+            star_hover = _create_star_icon("#ffe082")
+            star_tip = "Активный Quick Target (Ctrl+B)\nНажмите, чтобы снять"
         else:
-            self.btn_star.setToolTip("Сделать Quick Target (Ctrl+B)")
-            self.btn_star.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    border-radius: 3px;
-                    color: #555555;
-                    font-size: 13px;
-                    padding-bottom: 1px;
-                }
-                QPushButton:hover {
-                    color: #ffd54f;
-                    background-color: rgba(255, 213, 79, 0.16);
-                }
-            """)
+            star_normal = _create_star_icon("#5c606a")
+            star_hover = _create_star_icon("#ffd54f")
+            star_tip = "Сделать Quick Target (Ctrl+B)"
+
+        self.btn_star = ActionButton(star_normal, star_hover, star_tip, self)
         self.btn_star.clicked.connect(lambda: self.quickTargetToggled.emit(self.cid))
 
-        self.btn_delete = QPushButton("✕")
-        self.btn_delete.setFixedSize(22, 22)
-        self.btn_delete.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_delete.setToolTip("Удалить мудборд")
-        self.btn_delete.setAcceptDrops(False)
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: none;
-                border-radius: 3px;
-                color: #555555;
-                font-size: 12px;
-                font-weight: bold;
-                padding-bottom: 1px;
-            }
-            QPushButton:hover {
-                color: #ef5350;
-                background-color: rgba(239, 83, 80, 0.2);
-            }
-        """)
+        cross_normal = _create_cross_icon("#5c606a")
+        cross_hover = _create_cross_icon("#ef5350")
+        self.btn_delete = ActionButton(cross_normal, cross_hover, "Удалить мудборд", self)
         self.btn_delete.clicked.connect(lambda: self.deleteRequested.emit(self.cid))
 
         layout.addWidget(self.thumb_label)
@@ -524,19 +561,27 @@ class CollectionsPanel(QWidget):
         self.collectionCleared.emit()
 
     def _on_create_clicked(self):
-        name, ok = QInputDialog.getText(
-            self,
-            "Новый мудборд",
-            "Название проекта / подборки:",
-            text=""
-        )
-        if ok and name.strip():
-            try:
-                cid = self.repository.create_collection(name.strip())
-                self.reload()
-                self.statusNotice.emit(f"Создан мудборд '{name.strip()}'")
-            except Exception as e:
-                QMessageBox.warning(self, "Ошибка", str(e))
+        dlg = QInputDialog(self)
+        dlg.setWindowTitle("Новый мудборд")
+        dlg.setLabelText("Название проекта / подборки:")
+        dlg.setOkButtonText("Создать")
+        dlg.setCancelButtonText("Отмена")
+        dlg.setStyleSheet("""
+            QInputDialog { background-color: #1a1b1e; color: #fff; }
+            QLabel { color: #ddd; font-size: 13px; }
+            QLineEdit { background-color: #121316; border: 1px solid #333; border-radius: 4px; padding: 6px; color: #fff; }
+            QPushButton { background-color: #2a2d34; border: 1px solid #444; border-radius: 4px; padding: 6px 14px; color: #fff; }
+            QPushButton:hover { background-color: #353942; }
+        """)
+        if dlg.exec() == QInputDialog.DialogCode.Accepted:
+            name = dlg.textValue().strip()
+            if name:
+                try:
+                    cid = self.repository.create_collection(name)
+                    self.reload()
+                    self.statusNotice.emit(f"Создан мудборд «{name}»")
+                except Exception as e:
+                    QMessageBox.warning(self, "Ошибка", str(e))
 
     def _on_row_quick_target_toggled(self, cid: int):
         current_target = self.repository.get_quick_target()
@@ -544,30 +589,58 @@ class CollectionsPanel(QWidget):
         name = col["name"] if col else "Набор"
         if current_target == cid:
             self.repository.set_quick_target(None)
-            self.statusNotice.emit(f"Quick Target снят с '{name}'")
+            self.statusNotice.emit(f"Quick Target снят с «{name}»")
         else:
             self.repository.set_quick_target(cid)
-            self.statusNotice.emit(f"Quick Target назначен: '{name}' (Ctrl+B)")
+            self.statusNotice.emit(f"Quick Target назначен: «{name}» (Ctrl+B)")
         self.reload()
 
     def _on_row_delete_requested(self, cid: int):
         col = self.repository.get_collection(cid)
         if not col:
             return
-        ans = QMessageBox.question(
-            self,
-            "Удалить мудборд?",
-            f"Удалить мудборд '{col['name']}'?\n\nВсе изображения останутся в общей библиотеке.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if ans == QMessageBox.StandardButton.Yes:
+
+        box = QMessageBox(self)
+        box.setWindowTitle("Удалить мудборд?")
+        box.setText(f"Удалить мудборд «{col['name']}»?\n\nВсе изображения останутся в общей библиотеке.")
+        box.setIcon(QMessageBox.Icon.Question)
+        btn_delete = box.addButton("Удалить", QMessageBox.ButtonRole.YesRole)
+        btn_delete.setStyleSheet("""
+            QPushButton {
+                background-color: #c62828;
+                color: #ffffff;
+                font-weight: bold;
+                border: 1px solid #e53935;
+                border-radius: 4px;
+                padding: 6px 14px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
+        btn_cancel = box.addButton("Отмена", QMessageBox.ButtonRole.NoRole)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #2a2d34;
+                color: #e0e0e0;
+                border: 1px solid #444;
+                border-radius: 4px;
+                padding: 6px 14px;
+            }
+            QPushButton:hover {
+                background-color: #353942;
+            }
+        """)
+        box.setDefaultButton(btn_cancel)
+        box.exec()
+
+        if box.clickedButton() == btn_delete:
             if self._current_selected_id == cid:
                 self.clear_selection()
             self.repository.delete_collection(cid)
             self.reload()
             self.contentsChanged.emit()
-            self.statusNotice.emit(f"Мудборд '{col['name']}' удален")
+            self.statusNotice.emit(f"Мудборд «{col['name']}» удален")
 
     def add_assets_to_collection(self, collection_id: int, asset_ids: List[int]):
         if not asset_ids:
@@ -580,11 +653,11 @@ class CollectionsPanel(QWidget):
             if added:
                 self.last_added = (collection_id, added)
                 self.btn_undo.setEnabled(True)
-                msg = f"В набор '{col_name}' добавлено: {len(added)}"
+                msg = f"В набор «{col_name}» добавлено: {len(added)}"
                 if len(asset_ids) > len(added):
                     msg += f" (уже были: {len(asset_ids) - len(added)})"
             else:
-                msg = f"Все выбранные изображения ({len(asset_ids)}) уже есть в наборе '{col_name}'"
+                msg = f"Все выбранные изображения ({len(asset_ids)}) уже есть в наборе «{col_name}»"
 
             # Auto-sync moodboard.html if project directory is bound
             if col and col.get("export_dir"):
@@ -618,7 +691,7 @@ class CollectionsPanel(QWidget):
             self.repository.remove_assets(collection_id, added_ids)
             col = self.repository.get_collection(collection_id)
             name = col["name"] if col else "Набор"
-            msg = f"Отменено добавление {len(added_ids)} кадров в '{name}'"
+            msg = f"Отменено добавление {len(added_ids)} кадров в «{name}»"
 
             # Auto-sync moodboard.html if project directory is bound
             if col and col.get("export_dir"):
@@ -663,17 +736,20 @@ class CollectionsPanel(QWidget):
 
         if has_moodboard:
             act_open_html = menu.addAction("🌐 Открыть moodboard.html")
+            act_open_dir = menu.addAction(f"📂 Открыть папку проекта ({Path(export_dir).name})")
+            act_sync_html = menu.addAction("🔄 Синхронизировать moodboard.html")
+            act_bind_dir = menu.addAction("📁 Сменить папку проекта…")
+        elif export_dir and Path(export_dir).exists():
+            act_open_html = None
+            act_open_dir = menu.addAction(f"📂 Открыть папку проекта ({Path(export_dir).name})")
+            act_sync_html = menu.addAction("🔄 Создать / Синхронизировать moodboard.html")
+            act_bind_dir = menu.addAction("📁 Сменить папку проекта…")
         else:
             act_open_html = None
-
-        if export_dir and Path(export_dir).exists():
-            act_open_dir = menu.addAction("📂 Открыть папку проекта")
-            act_sync_html = menu.addAction("🔄 Синхронизировать moodboard.html")
-        else:
             act_open_dir = None
             act_sync_html = None
+            act_bind_dir = menu.addAction("🌐 Создать moodboard.html в папке проекта…")
 
-        act_bind_dir = menu.addAction("📁 Привязать папку проекта…")
         act_export = menu.addAction("⚙️ Экспорт / Синхронизация…")
 
         menu.addSeparator()
@@ -689,7 +765,7 @@ class CollectionsPanel(QWidget):
         if action == act_target:
             self.repository.set_quick_target(cid)
             self.reload()
-            self.statusNotice.emit(f"Quick Target назначен: '{col['name']}'")
+            self.statusNotice.emit(f"Quick Target назначен: «{col['name']}»")
 
         elif action == act_open_html and has_moodboard:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(moodboard_file)))
@@ -700,40 +776,53 @@ class CollectionsPanel(QWidget):
         elif action == act_sync_html and export_dir:
             synced = sync_collection_web_moodboard(self.repository, cid)
             if synced:
-                self.statusNotice.emit(f"moodboard.html синхронизирован в '{export_dir}'")
+                self.statusNotice.emit(f"moodboard.html синхронизирован в «{export_dir}»")
             else:
                 QMessageBox.warning(self, "Ошибка синхронизации", "Не удалось обновить moodboard.html")
 
         elif action == act_bind_dir:
+            initial_dir = export_dir or str(Path.home())
             chosen = QFileDialog.getExistingDirectory(
                 self,
-                "Выберите рабочую папку проекта",
-                export_dir or str(Path.home()),
+                "Выберите папку проекта (где создать moodboard.html)",
+                initial_dir,
                 QFileDialog.Option.ShowDirsOnly
             )
             if chosen:
                 self.repository.remember_export_dir(cid, chosen)
-                sync_collection_web_moodboard(self.repository, cid, chosen)
+                synced = sync_collection_web_moodboard(self.repository, cid, chosen)
                 self.reload()
-                self.statusNotice.emit(f"Папка проекта привязана: {chosen}")
+                self.statusNotice.emit(f"Создан moodboard.html в: {chosen}")
+                if synced and synced.exists():
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(str(synced)))
 
         elif action == act_export:
             dlg = ExportCollectionDialog(cid, self.repository, self)
             dlg.exec()
 
         elif action == act_rename:
-            new_name, ok = QInputDialog.getText(
-                self,
-                "Переименовать мудборд",
-                "Новое название:",
-                text=col["name"]
-            )
-            if ok and new_name.strip():
-                try:
-                    self.repository.rename_collection(cid, new_name.strip())
-                    self.reload()
-                except Exception as e:
-                    QMessageBox.warning(self, "Ошибка", str(e))
+            dlg = QInputDialog(self)
+            dlg.setWindowTitle("Переименовать мудборд")
+            dlg.setLabelText("Новое название:")
+            dlg.setTextValue(col["name"])
+            dlg.setOkButtonText("Сохранить")
+            dlg.setCancelButtonText("Отмена")
+            dlg.setStyleSheet("""
+                QInputDialog { background-color: #1a1b1e; color: #fff; }
+                QLabel { color: #ddd; font-size: 13px; }
+                QLineEdit { background-color: #121316; border: 1px solid #333; border-radius: 4px; padding: 6px; color: #fff; }
+                QPushButton { background-color: #2a2d34; border: 1px solid #444; border-radius: 4px; padding: 6px 14px; color: #fff; }
+                QPushButton:hover { background-color: #353942; }
+            """)
+            if dlg.exec() == QInputDialog.DialogCode.Accepted:
+                new_name = dlg.textValue().strip()
+                if new_name:
+                    try:
+                        self.repository.rename_collection(cid, new_name)
+                        self.reload()
+                        self.statusNotice.emit(f"Мудборд переименован в «{new_name}»")
+                    except Exception as e:
+                        QMessageBox.warning(self, "Ошибка", str(e))
 
         elif action == act_clear_cover:
             self.repository.set_cover(cid, None)
