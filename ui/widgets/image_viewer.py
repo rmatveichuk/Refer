@@ -400,6 +400,14 @@ class ImageViewerWindow(QMainWindow):
             self.btn_filter_project.setVisible(project_found)
             self.btn_filter_author.setVisible(author_found)
 
+        is_in_collection = self.parent_window and getattr(self.parent_window, "current_collection_id", None) is not None
+        if is_in_collection:
+            self.btn_delete.setText("❌ Убрать из набора")
+            self.btn_delete.setToolTip("Убрать кадр из текущего набора (Delete)")
+        else:
+            self.btn_delete.setText("🗑 Скрыть")
+            self.btn_delete.setToolTip("Скрыть из библиотеки (Delete)")
+
     def _toggle_favorite(self):
         if not self.db or self.current_index < 0: return
         asset = self.assets[self.current_index]
@@ -431,6 +439,19 @@ class ImageViewerWindow(QMainWindow):
         if self.current_index < 0 or not self.parent_window: return
         asset = self.assets[self.current_index]
         
+        is_in_collection = self.parent_window and getattr(self.parent_window, "current_collection_id", None) is not None
+        if is_in_collection:
+            self.parent_window.remove_assets_from_current_collection([asset.id])
+            if asset in self.assets:
+                self.assets.remove(asset)
+            if not self.assets:
+                self.close()
+            else:
+                if self.current_index >= len(self.assets):
+                    self.current_index = len(self.assets) - 1
+                self._load_full_image()
+            return
+
         if hasattr(self.parent_window, "_delete_assets_batch"):
             if self.parent_window._delete_assets_batch([asset]):
                 if asset in self.assets:

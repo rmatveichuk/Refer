@@ -370,12 +370,41 @@ class MainWindow(QMainWindow):
         col = self.collection_repo.get_collection(collection_id)
         if col:
             self.result_title.setText(f"Набор: {col['name']}")
+        self.delete_button.setText("Убрать из набора")
+        self.delete_button.setToolTip("Убрать выделенные кадры из этого набора (Delete)")
         self._update_breadcrumbs()
 
     def _on_collection_cleared(self):
         self.current_collection_id = None
         self.result_title.setText("Референсы")
+        self.delete_button.setText(tr("hide"))
+        self.delete_button.setToolTip(tr("hide"))
         self._update_breadcrumbs()
+
+    def remove_assets_from_current_collection(self, asset_ids: list[int]):
+        if self.current_collection_id is None or not asset_ids:
+            return
+        self.collection_repo.remove_assets(self.current_collection_id, asset_ids)
+        # Update model directly in memory
+        remove_set = set(asset_ids)
+        new_assets = [a for a in self.gallery_model.assets if a.id not in remove_set]
+        self.gallery_model.setAssets(new_assets)
+        self._refresh_library()
+        self.result_count.setText(f"Показано {len(new_assets)}")
+        self.search_panel.collections_panel.reload()
+        col = self.collection_repo.get_collection(self.current_collection_id)
+        col_name = col['name'] if col else "набора"
+        self.status_label.setText(f"✓ Убрано из набора «{col_name}»: {len(asset_ids)} кадр(ов)")
+
+    def set_as_current_collection_cover(self, asset_id: int):
+        if self.current_collection_id is None:
+            return
+        try:
+            self.collection_repo.set_cover(self.current_collection_id, asset_id)
+            self.search_panel.collections_panel.reload()
+            self.status_label.setText("✓ Обложка набора обновлена")
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", str(e))
 
     def _setup_catalog_menu(self):
         self.catalog_menu = QMenu(self)
@@ -419,7 +448,10 @@ class MainWindow(QMainWindow):
         if not assets:
             QMessageBox.information(self, "Ничего не выбрано", "Выделите изображения для удаления.")
             return
-        self._delete_assets_batch(assets)
+        if self.current_collection_id is not None:
+            self.remove_assets_from_current_collection([a.id for a in assets])
+        else:
+            self._delete_assets_batch(assets)
 
     def _confirm_hide(self, n: int) -> bool:
         parent_window = QApplication.activeWindow() or self

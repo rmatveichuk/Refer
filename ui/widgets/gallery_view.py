@@ -317,18 +317,36 @@ class GalleryView(QListView):
         menu = QMenu(self)
         
         # Check if multiple items are selected
+        is_in_collection = self.parent_window and getattr(self.parent_window, "current_collection_id", None) is not None
         selected_indexes = self.selectionModel().selectedIndexes()
+
+        # Если просматриваем мудборд: первоочередные действия — Убрать из набора и Сделать обложкой
+        if is_in_collection:
+            if len(selected_indexes) > 1:
+                target_assets = [model.assets[idx.row()] for idx in selected_indexes if idx.row() < len(model.assets)]
+                act_remove = menu.addAction(f"❌ Убрать из набора ({len(target_assets)})")
+                act_remove.triggered.connect(lambda: self._delete_assets(target_assets))
+            else:
+                asset = model.assets[index.row()]
+                act_remove = menu.addAction("❌ Убрать из набора")
+                act_remove.triggered.connect(lambda: self._delete_asset(asset))
+                act_cover = menu.addAction("🖼 Сделать обложкой набора")
+                act_cover.triggered.connect(lambda: self.parent_window.set_as_current_collection_cover(asset.id))
+            menu.addSeparator()
 
         # Мудборды (коллекции)
         repo = getattr(self.parent_window, 'collection_repo', None) if self.parent_window else None
         if repo:
             target_assets = [model.assets[idx.row()] for idx in selected_indexes] if len(selected_indexes) > 1 else [model.assets[index.row()]]
             target_ids = [a.id for a in target_assets if a and a.id]
-            col_menu = menu.addMenu(f"📁 Добавить в мудборд ({len(target_ids)})" if len(target_ids) > 1 else "📁 Добавить в мудборд")
+            menu_title = f"📁 В другой мудборд ({len(target_ids)})" if is_in_collection and len(target_ids) > 1 else ("📁 В другой мудборд" if is_in_collection else (f"📁 Добавить в мудборд ({len(target_ids)})" if len(target_ids) > 1 else "📁 Добавить в мудборд"))
+            col_menu = menu.addMenu(menu_title)
             cols = repo.get_collections_with_counts()
             target_id = repo.get_quick_target()
             for c in cols:
                 cid = c["id"]
+                if is_in_collection and cid == self.parent_window.current_collection_id:
+                    continue
                 is_target = (cid == target_id)
                 prefix = "★ " if is_target else ""
                 act = col_menu.addAction(f"{prefix}{c['name']} ({c['asset_count']})")
@@ -355,8 +373,6 @@ class GalleryView(QListView):
                 web_action.triggered.connect(lambda: self._batch_ai_analyze(web_assets))
             
             # 3. Только без описания
-            # Note: asset objects in model might not have description updated, so we check DB status
-            # But for simplicity let's just add the action and filter inside _batch_ai_analyze or here
             needed_assets = [a for a in selected_assets if not getattr(a, 'description', None)]
             if needed_assets and len(needed_assets) > 0:
                 needed_action = ai_menu.addAction(f"Только без описания ({len(needed_assets)})")
@@ -365,7 +381,7 @@ class GalleryView(QListView):
             menu.addSeparator()
             
             delete_action = menu.addAction(f"Скрыть из библиотеки ({len(selected_assets)})")
-            delete_action.triggered.connect(lambda: self._delete_assets(selected_assets))
+            delete_action.triggered.connect(lambda: self.parent_window._delete_assets_batch(selected_assets) if self.parent_window else None)
         else:
             asset = model.assets[index.row()]
 
@@ -384,7 +400,7 @@ class GalleryView(QListView):
             menu.addSeparator()
             
             delete_action = menu.addAction("Скрыть из библиотеки")
-            delete_action.triggered.connect(lambda: self._delete_asset(asset))
+            delete_action.triggered.connect(lambda: self.parent_window._delete_assets_batch([asset]) if self.parent_window else None)
         
         menu.exec(self.viewport().mapToGlobal(pos))
 
@@ -411,6 +427,13 @@ class GalleryView(QListView):
             self.parent_window.status_label.setText(f"⭐ Ассет #{asset.id} {status} избранного")
 
     def _delete_assets(self, assets):
+        if not assets:
+            return
+        if self.parent_window and getattr(self.parent_window, "current_collection_id", None) is not None:
+            ids = [a.id for a in assets if a and a.id]
+            self.parent_window.remove_assets_from_current_collection(ids)
+            return
+
         if not self.db: return
         if self.parent_window and hasattr(self.parent_window, "_delete_assets_batch"):
             self.parent_window._delete_assets_batch(assets)

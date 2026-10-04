@@ -82,6 +82,11 @@ class TestCollections(unittest.TestCase):
         cols = self.repo.get_collections_with_counts()
         self.assertEqual(cols[0]["asset_count"], 4)
 
+        # Set cover test
+        self.repo.set_cover(col_id, 3)
+        col = self.repo.get_collection(col_id)
+        self.assertEqual(col["cover_asset_id"], 3)
+
         # Remove asset 2
         self.repo.remove_assets(col_id, [2])
         assets_after = self.repo.get_collection_assets(col_id)

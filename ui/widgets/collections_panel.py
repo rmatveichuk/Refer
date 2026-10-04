@@ -22,7 +22,7 @@ MIME_ASSET_IDS = "application/x-refer-asset-ids"
 
 
 class CollectionsListWidget(QListWidget):
-    """QListWidget с поддержкой подсветки и приёма Drag & Drop ассетов."""
+    """QListWidget с удобным приёмом Drag & Drop (большая зона сброса и подсветка)."""
 
     assetsDropped = pyqtSignal(int, list)
 
@@ -31,46 +31,99 @@ class CollectionsListWidget(QListWidget):
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.setIconSize(QSize(28, 28))
+        self.setIconSize(QSize(32, 32))
         self._hover_item: Optional[QListWidgetItem] = None
 
-        self.setStyleSheet("""
+        self._base_stylesheet = """
             QListWidget {
                 background-color: transparent;
-                border: none;
+                border: 1px solid transparent;
+                border-radius: 6px;
                 outline: none;
+                padding: 2px;
             }
             QListWidget::item {
-                padding: 5px 8px;
-                border-radius: 4px;
-                color: #d8d8d8;
+                min-height: 38px;
+                padding: 6px 10px;
+                border-radius: 6px;
+                color: #e2e4e8;
                 font-size: 13px;
-                margin-bottom: 2px;
+                background-color: #1a1c22;
+                border: 1px solid #2a2d36;
+                margin-bottom: 4px;
             }
             QListWidget::item:hover {
-                background-color: #24272e;
+                background-color: #252831;
+                border-color: #3d4250;
                 color: #fff;
             }
             QListWidget::item:selected {
                 background-color: #1976D2;
+                border-color: #2196F3;
                 color: #ffffff;
                 font-weight: bold;
             }
+        """
+        self.setStyleSheet(self._base_stylesheet)
+
+    def _reset_drag_style(self):
+        self.setStyleSheet(self._base_stylesheet)
+
+    def _apply_drag_style(self):
+        self.setStyleSheet(self._base_stylesheet + """
+            QListWidget {
+                border: 2px dashed #2196F3;
+                background-color: rgba(33, 150, 243, 0.07);
+                border-radius: 6px;
+            }
         """)
+
+    def _clear_hover(self):
+        if self._hover_item:
+            self._hover_item.setBackground(QColor(0, 0, 0, 0))
+            self._hover_item = None
+
+    def _get_target_item(self, pos=None) -> Optional[QListWidgetItem]:
+        if pos is not None:
+            item = self.itemAt(pos)
+            if item:
+                return item
+
+        # If hovering outside a specific item (e.g. empty space of list):
+        panel = self.parent() if isinstance(self.parent(), CollectionsPanel) else None
+        if panel:
+            # 1. Currently opened collection
+            if panel._current_selected_id is not None:
+                for i in range(self.count()):
+                    it = self.item(i)
+                    if it.data(Qt.ItemDataRole.UserRole) == panel._current_selected_id:
+                        return it
+
+            # 2. Quick Target collection
+            target_id = panel.repository.get_quick_target()
+            if target_id is not None:
+                for i in range(self.count()):
+                    it = self.item(i)
+                    if it.data(Qt.ItemDataRole.UserRole) == target_id:
+                        return it
+
+        # 3. First item in list
+        return self.item(0) if self.count() > 0 else None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(MIME_ASSET_IDS):
+            self._apply_drag_style()
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
         if event.mimeData().hasFormat(MIME_ASSET_IDS):
-            item = self.itemAt(event.position().toPoint())
+            item = self._get_target_item(event.position().toPoint())
             if self._hover_item and self._hover_item != item:
-                self._hover_item.setBackground(QColor(0, 0, 0, 0))
+                self._clear_hover()
             if item:
-                item.setBackground(QColor(25, 118, 210, 100)) # Navy blue highlight
+                item.setBackground(QColor(33, 150, 243, 130))
                 self._hover_item = item
                 event.acceptProposedAction()
             else:
@@ -79,17 +132,15 @@ class CollectionsListWidget(QListWidget):
             event.ignore()
 
     def dragLeaveEvent(self, event):
-        if self._hover_item:
-            self._hover_item.setBackground(QColor(0, 0, 0, 0))
-            self._hover_item = None
+        self._clear_hover()
+        self._reset_drag_style()
         event.accept()
 
     def dropEvent(self, event):
-        if self._hover_item:
-            self._hover_item.setBackground(QColor(0, 0, 0, 0))
-            self._hover_item = None
+        self._clear_hover()
+        self._reset_drag_style()
 
-        item = self.itemAt(event.position().toPoint())
+        item = self._get_target_item(event.position().toPoint())
         if not item or not event.mimeData().hasFormat(MIME_ASSET_IDS):
             event.ignore()
             return
@@ -224,6 +275,25 @@ class CollectionsPanel(QWidget):
         """)
         self.btn_undo.clicked.connect(self.undo_last_add)
         layout.addWidget(self.btn_undo)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(MIME_ASSET_IDS):
+            self.list_widget.dragEnterEvent(event)
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(MIME_ASSET_IDS):
+            self.list_widget.dragMoveEvent(event)
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.list_widget.dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self.list_widget.dropEvent(event)
 
     def reload(self):
         """Обновляет список наборов, иконки обложек и статус Quick Target."""
@@ -242,6 +312,7 @@ class CollectionsPanel(QWidget):
                 item_text = f"{prefix}{col['name']}  ·  {count}"
 
                 item = QListWidgetItem(item_text)
+                item.setSizeHint(QSize(0, 44))
                 item.setData(Qt.ItemDataRole.UserRole, cid)
                 item.setToolTip(f"{col['name']}\nИзображений: {count}" + ("\n(Quick Target: Ctrl+B)" if is_target else ""))
 
@@ -260,9 +331,9 @@ class CollectionsPanel(QWidget):
 
             # Update hint
             if quick_target_name:
-                self.hint_label.setText(f"Ctrl+B → {quick_target_name}\nПеретащите кадры на строку набора.")
+                self.hint_label.setText(f"Ctrl+B → {quick_target_name}\nИли перетащите кадры в этот блок.")
             else:
-                self.hint_label.setText("Ctrl+B: выберите Quick Target в меню\nПеретащите кадры на строку набора.")
+                self.hint_label.setText("Ctrl+B: назначьте Quick Target\nИли перетащите кадры в этот блок.")
 
     def _on_item_clicked(self, item: QListWidgetItem):
         cid = item.data(Qt.ItemDataRole.UserRole)
