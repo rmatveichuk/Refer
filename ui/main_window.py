@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QVBoxLayout, QDialog, QHBoxLayout, QWidget, QMessageBox, QPushButton, 
     QLabel, QProgressBar, QTabWidget, QTableView, QHeaderView, 
-    QAbstractItemView, QMenu, QApplication, QSlider, QToolButton, QButtonGroup
+    QAbstractItemView, QMenu, QApplication, QSlider, QToolButton, QButtonGroup, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSlot, QTimer, QRunnable, QObject, pyqtSignal
 from PyQt6.QtGui import QAction, QShortcut, QKeySequence
@@ -301,21 +301,28 @@ class MainWindow(QMainWindow):
         self.btn_scope_all.setChecked(True)
         heading.addWidget(scope_widget)
 
-        heading.addStretch()
+        heading.addStretch(1)
 
         # Viewport controls: size slider, select all, hide
         controls_widget = QWidget()
+        controls_widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         controls = QHBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(6)
+        controls.setSpacing(8)
 
-        controls.addWidget(QLabel("Размер"))
+        lbl_size = QLabel("Размер")
+        lbl_size.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        lbl_size.setStyleSheet("color: #8e949e; font-size: 12px;")
+        controls.addWidget(lbl_size)
+
         self.thumbnail_size = QSlider(Qt.Orientation.Horizontal)
         self.thumbnail_size.setRange(140, 320)
         self.thumbnail_size.setValue(220)
         self.thumbnail_size.setFixedWidth(85)
         self.thumbnail_size.valueChanged.connect(lambda size: self.gallery.set_thumbnail_size(size))
         controls.addWidget(self.thumbnail_size)
+
+        controls.addSpacing(6)
 
         self.select_all_button = QPushButton(tr("select_all"))
         self.select_all_button.clicked.connect(self._select_all_gallery)
@@ -325,7 +332,7 @@ class MainWindow(QMainWindow):
         self.delete_button.clicked.connect(self._delete_selected_gallery)
         controls.addWidget(self.delete_button)
 
-        heading.addWidget(controls_widget)
+        heading.addWidget(controls_widget, 0, Qt.AlignmentFlag.AlignRight)
         results_layout.addLayout(heading)
 
         # 2. Breadcrumbs
