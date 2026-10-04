@@ -31,8 +31,9 @@ class Cancelled(Exception):
 
 
 def sanitize_filename(name: str, max_length: int = 50) -> str:
-    slug = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name or '').strip(' .')
-    return slug[:max_length] or 'item'
+    slug = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name or '')
+    slug = slug.strip(' .')[:max_length].strip(' .')
+    return slug or 'item'
 
 
 def download_web_image(
@@ -67,6 +68,7 @@ def download_web_image(
     if not ext or ext not in EXTENSIONS:
         ext = ".jpg"
 
+    target_path_without_ext.parent.mkdir(parents=True, exist_ok=True)
     final_path = target_path_without_ext.with_suffix(ext)
     tmp_path = final_path.with_suffix(f"{ext}.tmp_{uuid.uuid4().hex[:6]}")
 
@@ -173,7 +175,7 @@ def export_moodboard(
         images_dir = stage_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
-        if format == "html":
+        if format in {"html", "offline_html"}:
             previews_dir = stage_dir / "previews"
             previews_dir.mkdir(parents=True, exist_ok=True)
 
@@ -260,6 +262,7 @@ def export_moodboard(
             if format in {"html", "offline_html"}:
                 thumb_rel = f"previews/{n:03d}.jpg"
                 thumb_dest = stage_dir / thumb_rel
+                thumb_dest.parent.mkdir(parents=True, exist_ok=True)
 
                 try:
                     with Image.open(dst) as img:
