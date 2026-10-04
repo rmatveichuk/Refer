@@ -394,7 +394,12 @@ class MainWindow(QMainWindow):
         self.search_panel.collections_panel.reload()
         col = self.collection_repo.get_collection(self.current_collection_id)
         col_name = col['name'] if col else "набора"
-        self.status_label.setText(f"✓ Убрано из набора «{col_name}»: {len(asset_ids)} кадр(ов)")
+        msg = f"✓ Убрано из набора «{col_name}»: {len(asset_ids)} кадр(ов)"
+        if col and col.get("export_dir"):
+            from export.moodboard_exporter import sync_collection_web_moodboard
+            sync_collection_web_moodboard(self.collection_repo, self.current_collection_id)
+            msg += " (moodboard.html синхронизирован)"
+        self.status_label.setText(msg)
 
     def set_as_current_collection_cover(self, asset_id: int):
         if self.current_collection_id is None:
@@ -402,6 +407,10 @@ class MainWindow(QMainWindow):
         try:
             self.collection_repo.set_cover(self.current_collection_id, asset_id)
             self.search_panel.collections_panel.reload()
+            col = self.collection_repo.get_collection(self.current_collection_id)
+            if col and col.get("export_dir"):
+                from export.moodboard_exporter import sync_collection_web_moodboard
+                sync_collection_web_moodboard(self.collection_repo, self.current_collection_id)
             self.status_label.setText("✓ Обложка набора обновлена")
         except Exception as e:
             QMessageBox.warning(self, "Ошибка", str(e))

@@ -36,8 +36,8 @@ def sanitize_filename(name: str, max_length: int = 50) -> str:
 def export_moodboard(
     board: BoardSnapshot,
     target_dir: str | Path,
-    format: str = "folder",
-    mode: str = "copy",
+    format: str = "web_html",
+    mode: str = "web",
     use_numbered_names: bool = True,
     cancel: Optional[Event] = None,
     progress: Optional[Callable[[int, int, str], None]] = None
@@ -48,14 +48,22 @@ def export_moodboard(
     Args:
         board: Снимок набора (BoardSnapshot)
         target_dir: Путь к целевой рабочей папке
-        format: 'folder' (файлы + manifest) или 'html' (автономный HTML + печать)
-        mode: 'copy', 'hardlink', 'auto' (hardlink -> copy fallback), 'symlink'
+        format: 'web_html' (0 МБ на диске, веб-ссылки на оригиналы),
+                'folder' (файлы + manifest) или 'html'/'offline_html' (оффлайн копии)
+        mode: 'web', 'copy', 'hardlink', 'auto', 'symlink'
         use_numbered_names: Добавлять нумерацию 001_Author_Project.ext
         cancel: threading.Event для безопасного прерывания
         progress: callback(current, total, title)
     """
-    if format not in {"folder", "html"}:
-        raise ValueError("Неизвестный формат экспорта. Допустимы: 'folder', 'html'.")
+    valid_formats = {"web_html", "folder", "html", "offline_html"}
+    if format not in valid_formats:
+        raise ValueError(f"Неизвестный формат экспорта: '{format}'. Допустимы: {', '.join(sorted(valid_formats))}.")
+
+    if not board.items:
+        raise ValueError("В мудборде нет изображений для экспорта.")
+
+    if format == "web_html" or (format == "html" and mode == "web"):
+        return _export_web_moodboard(board, target_dir, cancel=cancel, progress=progress)
 
     if mode not in {"copy", "hardlink", "auto", "symlink"}:
         raise ValueError("Неизвестный режим экспорта. Допустимы: 'copy', 'hardlink', 'auto', 'symlink'.")
@@ -436,6 +444,734 @@ def _build_html_template(title: str, desc_html: str, cards_html: str, date_str: 
         }}
         document.addEventListener('keydown', (e) => {{
             if (e.key === 'Escape') closeModal();
+        }});
+    </script>
+</body>
+</html>
+"""
+
+
+def resolve_project_web_url(project_url: str, domain: str) -> str:
+    """Нормализует URL проекта для перехода на сайт (ArchDaily, Behance и т.д.)."""
+    if not project_url:
+        return ""
+    p_url = str(project_url).strip()
+    if p_url.startswith("http://") or p_url.startswith("https://"):
+        return p_url
+    dom = (domain or "").lower()
+    clean = p_url.strip("/")
+    if "archdaily" in dom or dom == "archdaily.com":
+        return f"https://www.archdaily.com/{clean}"
+    if "behance" in dom or dom == "behance.net":
+        return f"https://www.behance.net/gallery/{clean}"
+    if dom:
+        return f"https://{dom}/{clean}"
+    if clean.isdigit():
+        return f"https://www.archdaily.com/{clean}"
+    return project_url
+
+
+def _export_web_moodboard(
+    board: BoardSnapshot,
+    target_dir: str | Path,
+    cancel: Optional[Event] = None,
+    progress: Optional[Callable[[int, int, str], None]] = None
+) -> Dict[str, Any]:
+    """
+    Экспортирует снимок набора в виде легкого автономного HTML-файла в папке проекта.
+    Zero Disk Duplication: физические копии изображений не создаются, используются
+    прямые веб-ссылки на оригиналы с CDN и локальные миниатюры в качестве оффлайн-фоллбэка.
+    """
+    cancel = cancel or Event()
+    progress = progress or (lambda n, total, text: None)
+
+    if cancel.is_set():
+        raise Cancelled("Экспорт отменён пользователем.")
+
+    root = Path(target_dir).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    records = []
+    cards_html = []
+    total_items = len(board.items)
+
+    for n, item in enumerate(board.items, 1):
+        if cancel.is_set():
+            raise Cancelled("Экспорт отменён пользователем.")
+
+        img_src = ""
+        if item.original_url and item.original_url.startswith("http"):
+            img_src = item.original_url
+        elif item.thumbnail_path and Path(item.thumbnail_path).exists():
+            img_src = Path(item.thumbnail_path).as_uri()
+        elif item.local_path and Path(item.local_path).exists():
+            img_src = Path(item.local_path).as_uri()
+
+        fallback_src = ""
+        if item.thumbnail_path and Path(item.thumbnail_path).exists():
+            fallback_src = Path(item.thumbnail_path).as_uri()
+        elif item.local_path and Path(item.local_path).exists():
+            fallback_src = Path(item.local_path).as_uri()
+
+        project_web_url = resolve_project_web_url(item.project_url, item.source_domain)
+
+        author_display = item.author.strip() if item.author else "Архитектура"
+        title_display = item.title.strip() if item.title else f"Референс #{n}"
+        location_display = item.project_location.strip() if item.project_location else ""
+
+        search_corpus = f"{author_display} {title_display} {location_display} {item.source_domain}".lower()
+
+        card_title = html.escape(title_display)
+        card_author = html.escape(author_display)
+        card_location = html.escape(location_display)
+
+        onerror_attr = f"onerror=\"if(this.src!=='{fallback_src}'){{this.src='{fallback_src}';}}\"" if fallback_src else ""
+        meta_badges = []
+        if location_display:
+            meta_badges.append(f"<span>📍 {card_location}</span>")
+        if item.source_domain:
+            meta_badges.append(f"<span>{html.escape(item.source_domain)}</span>")
+
+        cards_html.append(f"""
+        <div class="card" data-index="{n-1}" data-search="{html.escape(search_corpus)}" onclick="openModal({n-1})">
+            <div class="img-wrap">
+                <img src="{img_src}" alt="{card_title}" loading="lazy" {onerror_attr}>
+            </div>
+            <div class="card-caption">
+                <span class="card-num">{n:02d}</span>
+                <div class="card-text">
+                    <div class="card-author">{card_author}</div>
+                    <div class="card-title">{card_title}</div>
+                    {"<div class='card-meta-line'>" + "".join(meta_badges) + "</div>" if meta_badges else ""}
+                </div>
+            </div>
+        </div>
+        """)
+
+        records.append({
+            "index": n,
+            "asset_id": item.id,
+            "title": item.title,
+            "author": item.author,
+            "location": item.project_location,
+            "domain": item.source_domain,
+            "original_url": item.original_url,
+            "project_url": project_web_url,
+            "image_src": img_src,
+            "fallback_src": fallback_src,
+            "is_cover": item.is_cover
+        })
+
+        progress(n, total_items, item.title or item.author or f"#{n}")
+
+    escaped_board_name = html.escape(board.name)
+    escaped_desc = html.escape(board.description) if board.description else ""
+    desc_html = f'<p class="header-desc">{escaped_desc}</p>' if escaped_desc else ""
+
+    html_page = _build_web_html_template(
+        title=escaped_board_name,
+        desc_html=desc_html,
+        cards_html="".join(cards_html),
+        items_json=json.dumps(records, ensure_ascii=False),
+        date_str=datetime.now().strftime("%d.%m.%Y"),
+        count_str=str(len(records))
+    )
+
+    html_target = root / "moodboard.html"
+    tmp_html = root / f".moodboard-{uuid.uuid4().hex[:6]}.tmp"
+    with open(tmp_html, "w", encoding="utf-8") as f:
+        f.write(html_page)
+    tmp_html.replace(html_target)
+
+    manifest = {
+        "version": 1,
+        "format": "web_html",
+        "refer_board_id": board.id,
+        "board_name": board.name,
+        "description": board.description,
+        "exported_at": datetime.now().isoformat(),
+        "items_count": len(records),
+        "items": records
+    }
+    tmp_manifest = root / f".manifest-{uuid.uuid4().hex[:6]}.tmp"
+    with open(tmp_manifest, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    tmp_manifest.replace(root / "manifest.json")
+
+    return {
+        "directory": str(root),
+        "entrypoint": str(html_target),
+        "count": len(records),
+        "modes": {"web_links": len(records)},
+        "format": "web_html"
+    }
+
+
+def sync_collection_web_moodboard(repo, collection_id: int, target_dir: Optional[str] = None) -> Optional[Path]:
+    """Быстро генерирует или обновляет moodboard.html в папке проекта (0 МБ на диске)."""
+    try:
+        snapshot = repo.snapshot(collection_id)
+        out_dir = target_dir or snapshot.export_dir
+        if not out_dir:
+            return None
+        p = Path(out_dir).expanduser().resolve()
+        if not p.exists():
+            return None
+        result = export_moodboard(
+            board=snapshot,
+            target_dir=p,
+            format="web_html",
+            mode="web"
+        )
+        return Path(result["entrypoint"])
+    except Exception as e:
+        logger.warning(f"Could not auto-sync moodboard for collection #{collection_id}: {e}")
+        return None
+
+
+def _build_web_html_template(
+    title: str,
+    desc_html: str,
+    cards_html: str,
+    items_json: str,
+    date_str: str,
+    count_str: str
+) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} — Референсы (Refer)</title>
+    <style>
+        :root {{
+            --bg: #0d0e12;
+            --card-bg: #16181e;
+            --card-hover: #1e2029;
+            --text-main: #f0f2f5;
+            --text-muted: #8b92a0;
+            --accent: #29b6f6;
+            --accent-hover: #4fc3f7;
+            --border: #262933;
+            --border-hover: #3d4352;
+            --badge-bg: #222530;
+        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding-bottom: 60px;
+        }}
+        header {{
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(13, 14, 18, 0.90);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+        }}
+        .header-inner {{
+            max-width: 1720px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }}
+        .header-title-group h1 {{
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -0.2px;
+        }}
+        .header-desc {{
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }}
+        .header-meta {{
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        .count-badge {{
+            background-color: var(--badge-bg);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 11px;
+        }}
+        .header-controls {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }}
+        .search-box {{
+            position: relative;
+            display: flex;
+            align-items: center;
+        }}
+        .search-box input {{
+            background: #181920;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 12px 7px 32px;
+            color: #fff;
+            font-size: 13px;
+            width: 240px;
+            outline: none;
+            transition: border-color 0.18s, width 0.18s;
+        }}
+        .search-box input:focus {{
+            border-color: var(--accent);
+            width: 300px;
+        }}
+        .search-icon {{
+            position: absolute;
+            left: 10px;
+            color: var(--text-muted);
+            font-size: 13px;
+            pointer-events: none;
+        }}
+        .btn-ctrl {{
+            background: #1c1e25;
+            color: #e0e4ec;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 13px;
+            font-size: 12px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.18s ease;
+            user-select: none;
+        }}
+        .btn-ctrl:hover {{
+            background: #252833;
+            border-color: var(--border-hover);
+            color: #fff;
+        }}
+        .container {{
+            max-width: 1720px;
+            margin: 24px auto 0;
+            padding: 0 24px;
+        }}
+        .grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }}
+        .grid.compact {{
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 14px;
+        }}
+        .card {{
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }}
+        .card:hover {{
+            transform: translateY(-3px);
+            border-color: var(--border-hover);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+        }}
+        .img-wrap {{
+            position: relative;
+            width: 100%;
+            height: 230px;
+            background: #090a0d;
+            overflow: hidden;
+        }}
+        .grid.compact .img-wrap {{
+            height: 160px;
+        }}
+        .img-wrap img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.28s ease;
+        }}
+        .card:hover .img-wrap img {{
+            transform: scale(1.03);
+        }}
+        .card-caption {{
+            padding: 10px 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: var(--card-bg);
+        }}
+        .card-num {{
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+            background: rgba(41, 182, 246, 0.12);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 1px;
+        }}
+        .card-text {{
+            flex: 1;
+            min-width: 0;
+        }}
+        .card-author {{
+            font-size: 12px;
+            font-weight: 600;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .card-title {{
+            font-size: 13px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }}
+        .card-meta-line {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #68707f;
+        }}
+        #modal {{
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(6, 7, 9, 0.96);
+            z-index: 1000;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 24px;
+            box-sizing: border-box;
+        }}
+        #modal.open {{
+            display: flex;
+        }}
+        .modal-top-bar {{
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+            padding: 0 10px;
+        }}
+        .modal-counter {{
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }}
+        .modal-close-btn {{
+            font-size: 26px;
+            color: #ccc;
+            cursor: pointer;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+            transition: background 0.18s, color 0.18s;
+        }}
+        .modal-close-btn:hover {{
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }}
+        .modal-center {{
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 0;
+            margin: 10px 0;
+        }}
+        #modal-img {{
+            max-width: 95vw;
+            max-height: 78vh;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 14px 45px rgba(0,0,0,0.85);
+        }}
+        .nav-btn {{
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(22, 24, 30, 0.75);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff;
+            font-size: 20px;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            user-select: none;
+        }}
+        .nav-btn:hover {{
+            background: rgba(41, 182, 246, 0.9);
+            border-color: var(--accent);
+        }}
+        .nav-prev {{ left: 16px; }}
+        .nav-next {{ right: 16px; }}
+        .modal-bottom-bar {{
+            background: #15171d;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            max-width: 95vw;
+            width: 920px;
+        }}
+        .modal-info {{
+            min-width: 0;
+            flex: 1;
+        }}
+        .modal-author {{
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .modal-title {{
+            font-size: 13px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .modal-actions {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }}
+        .modal-btn {{
+            background: #20232c;
+            border: 1px solid #333846;
+            color: #e2e6ef;
+            padding: 6px 13px;
+            border-radius: 5px;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: background 0.18s, color 0.18s;
+        }}
+        .modal-btn:hover {{
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            font-weight: 600;
+        }}
+        @page {{
+            size: A4 landscape;
+            margin: 10mm;
+        }}
+        @media print {{
+            body {{ background: #fff !important; color: #000 !important; padding: 0; }}
+            header {{ position: static; background: none; border-bottom: 2px solid #ccc; padding: 0 0 10px; }}
+            .header-controls {{ display: none !important; }}
+            .header-title-group h1 {{ color: #000 !important; font-size: 18pt; }}
+            .header-meta {{ color: #555 !important; }}
+            .container {{ margin: 10px 0 0; padding: 0; max-width: 100%; }}
+            .grid {{ display: block !important; }}
+            .card {{
+                display: inline-block !important;
+                vertical-align: top;
+                width: 32% !important;
+                margin: 0 0.8% 12px 0 !important;
+                border: 1px solid #ddd !important;
+                background: #fff !important;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                box-shadow: none !important;
+                transform: none !important;
+            }}
+            .img-wrap {{ height: 48mm !important; background: #fff !important; }}
+            .img-wrap img {{ transform: none !important; }}
+            .card-caption {{ background: #fff !important; padding: 6px 8px !important; }}
+            .card-num {{ color: #000 !important; background: #eee !important; }}
+            .card-author {{ color: #000 !important; font-size: 9pt !important; }}
+            .card-title {{ color: #555 !important; font-size: 8.5pt !important; }}
+            .card-meta-line {{ color: #777 !important; font-size: 7.5pt !important; }}
+            #modal {{ display: none !important; }}
+        }}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div class="header-title-group">
+                <h1>{title}</h1>
+                {desc_html}
+                <div class="header-meta">
+                    <span class="count-badge" id="visible-badge">{count_str} кадров</span>
+                    <span>Экспортировано {date_str}</span>
+                    <span>• Референсы Refer</span>
+                </div>
+            </div>
+            <div class="header-controls">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Поиск (автор, проект, город)…" oninput="filterCards()">
+                </div>
+                <button class="btn-ctrl" onclick="toggleCompactMode()" id="btnCompact">⊞ Сетка</button>
+                <button class="btn-ctrl" onclick="window.print()">🖨 Печать (A4)</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="grid" id="cardsGrid">
+            {cards_html}
+        </div>
+    </div>
+
+    <!-- Modal Lightbox -->
+    <div id="modal" onclick="closeModal()">
+        <div class="modal-top-bar" onclick="event.stopPropagation()">
+            <span class="modal-counter" id="modalCounter">1 / 1</span>
+            <span class="modal-close-btn" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-center">
+            <div class="nav-btn nav-prev" onclick="event.stopPropagation(); prevImage();">&#10094;</div>
+            <img id="modal-img" src="" alt="Full view" onclick="event.stopPropagation()">
+            <div class="nav-btn nav-next" onclick="event.stopPropagation(); nextImage();">&#10095;</div>
+        </div>
+        <div class="modal-bottom-bar" onclick="event.stopPropagation()">
+            <div class="modal-info">
+                <div class="modal-author" id="modalAuthor">Автор</div>
+                <div class="modal-title" id="modalTitle">Проект</div>
+            </div>
+            <div class="modal-actions">
+                <a class="modal-btn" id="modalBtnProject" href="#" target="_blank" rel="noopener noreferrer">🌐 Страница проекта</a>
+                <a class="modal-btn" id="modalBtnOrig" href="#" target="_blank" rel="noopener noreferrer">🔍 Оригинал фото</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const items = {items_json};
+        let currentIndex = 0;
+
+        function openModal(index) {{
+            if (index < 0 || index >= items.length) return;
+            currentIndex = index;
+            updateModal();
+            document.getElementById('modal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }}
+
+        function closeModal() {{
+            document.getElementById('modal').classList.remove('open');
+            document.body.style.overflow = '';
+        }}
+
+        function prevImage() {{
+            if (!items.length) return;
+            currentIndex = (currentIndex - 1 + items.length) % items.length;
+            updateModal();
+        }}
+
+        function nextImage() {{
+            if (!items.length) return;
+            currentIndex = (currentIndex + 1) % items.length;
+            updateModal();
+        }}
+
+        function updateModal() {{
+            const it = items[currentIndex];
+            if (!it) return;
+            const img = document.getElementById('modal-img');
+            img.src = it.image_src;
+
+            document.getElementById('modalCounter').textContent = (currentIndex + 1) + ' / ' + items.length;
+            document.getElementById('modalAuthor').textContent = it.author || 'Архитектура';
+            document.getElementById('modalTitle').textContent = it.title + (it.location ? ' • ' + it.location : '');
+
+            const btnProj = document.getElementById('modalBtnProject');
+            if (it.project_url) {{
+                btnProj.style.display = 'inline-flex';
+                btnProj.href = it.project_url;
+            }} else {{
+                btnProj.style.display = 'none';
+            }}
+
+            const btnOrig = document.getElementById('modalBtnOrig');
+            if (it.original_url && it.original_url.startsWith('http')) {{
+                btnOrig.style.display = 'inline-flex';
+                btnOrig.href = it.original_url;
+            }} else if (it.image_src) {{
+                btnOrig.style.display = 'inline-flex';
+                btnOrig.href = it.image_src;
+            }} else {{
+                btnOrig.style.display = 'none';
+            }}
+        }}
+
+        function filterCards() {{
+            const q = document.getElementById('searchInput').value.toLowerCase().trim();
+            const cards = document.querySelectorAll('.card');
+            let visible = 0;
+            cards.forEach(c => {{
+                const s = c.getAttribute('data-search') || '';
+                if (!q || s.includes(q)) {{
+                    c.style.display = '';
+                    visible++;
+                }} else {{
+                    c.style.display = 'none';
+                }}
+            }});
+            document.getElementById('visible-badge').textContent = visible + ' кадров' + (visible < items.length ? ' (из ' + items.length + ')' : '');
+        }}
+
+        function toggleCompactMode() {{
+            const grid = document.getElementById('cardsGrid');
+            grid.classList.toggle('compact');
+            const isCompact = grid.classList.contains('compact');
+            document.getElementById('btnCompact').textContent = isCompact ? '⊞ Обычная' : '▤ Компактно';
+        }}
+
+        document.addEventListener('keydown', (e) => {{
+            const modal = document.getElementById('modal');
+            if (!modal.classList.contains('open')) return;
+            if (e.key === 'Escape') closeModal();
+            else if (e.key === 'ArrowLeft') prevImage();
+            else if (e.key === 'ArrowRight') nextImage();
         }});
     </script>
 </body>

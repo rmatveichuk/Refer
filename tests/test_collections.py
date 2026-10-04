@@ -190,6 +190,68 @@ class TestCollections(unittest.TestCase):
         self.assertIn("Export Board", index_html)
         self.assertIn("Референсы", index_html)
 
+        # Test Web HTML (Zero Disk Duplication)
+        web_export_dir = Path(self.temp_dir) / "project_work_dir"
+        web_result = export_moodboard(
+            board=snapshot,
+            target_dir=web_export_dir,
+            format="web_html",
+            mode="web"
+        )
+        self.assertEqual(web_result["count"], 2)
+        self.assertEqual(web_result["format"], "web_html")
+        self.assertTrue((web_export_dir / "moodboard.html").exists())
+        self.assertTrue((web_export_dir / "manifest.json").exists())
+        # Verify no images directory is duplicated in project
+        self.assertFalse((web_export_dir / "images").exists())
+
+        web_html_content = (web_export_dir / "moodboard.html").read_text(encoding="utf-8")
+        self.assertIn("Export Board", web_html_content)
+        self.assertIn("openModal", web_html_content)
+        self.assertIn("filterCards", web_html_content)
+
+        # Test sync_collection_web_moodboard
+        from export.moodboard_exporter import sync_collection_web_moodboard
+        self.repo.remember_export_dir(col_id, str(web_export_dir))
+        synced_path = sync_collection_web_moodboard(self.repo, col_id)
+        self.assertIsNotNone(synced_path)
+        self.assertTrue(synced_path.exists())
+        self.assertEqual(synced_path.name, "moodboard.html")
+
+    def test_collections_panel_and_row_widgets(self):
+        import sys
+        from PyQt6.QtWidgets import QApplication
+        from ui.widgets.collections_panel import CollectionsPanel, CollectionRowWidget
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        panel = CollectionsPanel(repository=self.repo)
+
+        # Create two collections
+        c1 = self.repo.create_collection("Board One")
+        c2 = self.repo.create_collection("Board Two")
+        panel.reload()
+
+        self.assertEqual(panel.list_widget.count(), 2)
+
+        # Verify item widget is CollectionRowWidget
+        item0 = panel.list_widget.item(0)
+        widget0 = panel.list_widget.itemWidget(item0)
+        self.assertIsInstance(widget0, CollectionRowWidget)
+        self.assertIsNotNone(widget0.btn_star)
+        self.assertIsNotNone(widget0.btn_delete)
+
+        # Test star click toggles Quick Target
+        widget0.btn_star.click()
+        # Reload occurs, verify quick target in repository
+        target_id = self.repo.get_quick_target()
+        self.assertIn(target_id, [c1, c2, None])
+
+        # Test select row
+        panel._on_row_clicked(c1)
+        self.assertEqual(panel._current_selected_id, c1)
+
+        panel.close()
+
 
 if __name__ == "__main__":
     unittest.main()

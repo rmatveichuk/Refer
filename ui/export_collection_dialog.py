@@ -111,12 +111,27 @@ class ExportCollectionDialog(QDialog):
         fmt_row = QHBoxLayout()
         fmt_row.addWidget(QLabel("Формат:"))
         self.format_combo = QComboBox()
-        self.format_combo.addItem("📁 Папка изображений + manifest.json", "folder")
-        self.format_combo.addItem("🌐 Интерактивный HTML-мудборд (с печатью A4)", "html")
+        self.format_combo.addItem("🌐 Веб-мудборд HTML (0 МБ на диске, ссылки на оригиналы)", "web_html")
+        self.format_combo.addItem("📁 Автономный HTML (копии файлов в images)", "offline_html")
+        self.format_combo.addItem("📂 Папка изображений (файлы + manifest.json)", "folder")
         fmt_row.addWidget(self.format_combo, 1)
         options_layout.addLayout(fmt_row)
 
-        # Mode
+        # Web mode info notice
+        self.web_info_label = QLabel(
+            "✨ Референсы не занимают место на диске проекта. Создаётся автономный "
+            "moodboard.html со ссылками на оригиналы в полном разрешении и оффлайн-кеш."
+        )
+        self.web_info_label.setWordWrap(True)
+        self.web_info_label.setStyleSheet("color: #29b6f6; font-size: 11px; padding: 4px 2px;")
+        options_layout.addWidget(self.web_info_label)
+
+        # Mode Widget (for offline copy / hardlink)
+        self.mode_widget = QWidget()
+        mode_inner_layout = QVBoxLayout(self.mode_widget)
+        mode_inner_layout.setContentsMargins(0, 4, 0, 0)
+        mode_inner_layout.setSpacing(8)
+
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Файлы:"))
         self.mode_combo = QComboBox()
@@ -125,13 +140,17 @@ class ExportCollectionDialog(QDialog):
         self.mode_combo.addItem("Только Hardlink (мгновенно, 0 байт на диске)", "hardlink")
         self.mode_combo.addItem("Символические ссылки (Symlink)", "symlink")
         mode_row.addWidget(self.mode_combo, 1)
-        options_layout.addLayout(mode_row)
+        mode_inner_layout.addLayout(mode_row)
 
         self.numbered_check = QCheckBox("Нумеровать файлы (001_Автор_Проект.ext)")
         self.numbered_check.setChecked(True)
-        options_layout.addWidget(self.numbered_check)
+        mode_inner_layout.addWidget(self.numbered_check)
 
+        options_layout.addWidget(self.mode_widget)
         layout.addWidget(options_group)
+
+        self.format_combo.currentIndexChanged.connect(self._on_format_changed)
+        self._on_format_changed()
 
         # 3. Progress and Status
         self.progress_bar = QProgressBar()
@@ -160,6 +179,15 @@ class ExportCollectionDialog(QDialog):
         actions_layout.addWidget(self.btn_start)
         actions_layout.addWidget(self.btn_cancel)
         layout.addLayout(actions_layout)
+
+    def _on_format_changed(self):
+        fmt = self.format_combo.currentData()
+        if fmt == "web_html":
+            self.mode_widget.hide()
+            self.web_info_label.show()
+        else:
+            self.mode_widget.show()
+            self.web_info_label.hide()
 
     def _on_browse(self):
         folder = QFileDialog.getExistingDirectory(
@@ -198,12 +226,16 @@ class ExportCollectionDialog(QDialog):
         self.progress_bar.setValue(0)
         self.status_label.setText("Подготовка файлов к экспорту…")
 
+        fmt = self.format_combo.currentData()
+        mode = "web" if fmt == "web_html" else self.mode_combo.currentData()
+        use_num = False if fmt == "web_html" else self.numbered_check.isChecked()
+
         self.worker = ExportWorker(
             board=self.board_snapshot,
             target_dir=target_dir,
-            export_format=self.format_combo.currentData(),
-            export_mode=self.mode_combo.currentData(),
-            use_numbered_names=self.numbered_check.isChecked(),
+            export_format=fmt,
+            export_mode=mode,
+            use_numbered_names=use_num,
             parent=self
         )
         self.worker.progress.connect(self._on_progress)
@@ -218,8 +250,13 @@ class ExportCollectionDialog(QDialog):
 
     def _on_succeeded(self, result: dict):
         self.output_result = result
-        modes_str = ", ".join(f"{k}: {v}" for k, v in result.get("modes", {}).items())
-        self.status_label.setText(f"✅ Готово! Экспортировано {result['count']} файлов ({modes_str})")
+        if result.get("format") == "web_html":
+            self.status_label.setText(f"✅ Готово! Создан moodboard.html ({result['count']} референсов, 0 МБ на диске)")
+            self.btn_open.setText("🌐 Открыть moodboard.html")
+        else:
+            modes_str = ", ".join(f"{k}: {v}" for k, v in result.get("modes", {}).items())
+            self.status_label.setText(f"✅ Готово! Экспортировано {result['count']} файлов ({modes_str})")
+            self.btn_open.setText("Открыть результат")
         self.btn_open.setEnabled(True)
 
     def _on_failed(self, msg: str):

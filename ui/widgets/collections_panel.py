@@ -5,20 +5,175 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSignalBlocker
-from PyQt6.QtGui import QIcon, QPixmap, QColor, QFont
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSignalBlocker, QUrl
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QFont, QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QMenu, QInputDialog, QMessageBox,
-    QAbstractItemView
+    QAbstractItemView, QFileDialog
 )
 
 from database.collection_repository import CollectionRepository
 from ui.export_collection_dialog import ExportCollectionDialog
+from export.moodboard_exporter import sync_collection_web_moodboard
 
 logger = logging.getLogger(__name__)
 
 MIME_ASSET_IDS = "application/x-refer-asset-ids"
+
+
+class CollectionRowWidget(QWidget):
+    """
+    Виджет карточки мудборда в списке с превью обложки, названием, количеством кадров
+    и двумя аккуратными малозаметными темносерыми иконками действий (★ Quick Target и ✕ Удалить).
+    """
+
+    quickTargetToggled = pyqtSignal(int)
+    deleteRequested = pyqtSignal(int)
+    rowClicked = pyqtSignal(int)
+
+    def __init__(
+        self,
+        collection_data: Dict[str, Any],
+        is_quick_target: bool,
+        is_selected: bool,
+        parent=None
+    ):
+        super().__init__(parent)
+        self.cid = collection_data["id"]
+        self.name = collection_data["name"]
+        self.count = collection_data.get("asset_count", 0)
+        self.is_quick_target = is_quick_target
+        self.is_selected = is_selected
+
+        self.setAcceptDrops(False)
+        self._init_ui(collection_data.get("cover_thumbnail_path"))
+
+    def _init_ui(self, thumb_path: Optional[str]):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(7)
+
+        # 1. Cover Thumbnail (32x32)
+        self.thumb_label = QLabel()
+        self.thumb_label.setFixedSize(32, 32)
+        self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.thumb_label.setStyleSheet("border-radius: 4px; background-color: #242730;")
+        self.thumb_label.setAcceptDrops(False)
+
+        if thumb_path and Path(thumb_path).exists():
+            pix = QPixmap(str(thumb_path))
+            if not pix.isNull():
+                self.thumb_label.setPixmap(
+                    pix.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                )
+        else:
+            self.thumb_label.setText("📁")
+            self.thumb_label.setStyleSheet("border-radius: 4px; background-color: #242730; color: #666; font-size: 13px;")
+
+        # 2. Text layout (Title + Count)
+        text_layout = QHBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(5)
+
+        self.name_label = QLabel(self.name)
+        self.name_label.setToolTip(self.name)
+        self.name_label.setAcceptDrops(False)
+
+        self.count_label = QLabel(f"· {self.count}")
+        self.count_label.setAcceptDrops(False)
+
+        text_layout.addWidget(self.name_label)
+        text_layout.addWidget(self.count_label)
+        text_layout.addStretch()
+
+        # 3. Action Buttons (Discreet dark-gray #555555 / #666666)
+        self.btn_star = QPushButton("★")
+        self.btn_star.setFixedSize(22, 22)
+        self.btn_star.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_star.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_star.setAcceptDrops(False)
+
+        if self.is_quick_target:
+            self.btn_star.setToolTip("Активный Quick Target (Ctrl+B)\nНажмите, чтобы снять")
+            self.btn_star.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                    border-radius: 3px;
+                    color: #ffca28;
+                    font-size: 13px;
+                    padding-bottom: 1px;
+                }
+                QPushButton:hover {
+                    color: #ffe082;
+                    background-color: rgba(255, 213, 79, 0.2);
+                }
+            """)
+        else:
+            self.btn_star.setToolTip("Сделать Quick Target (Ctrl+B)")
+            self.btn_star.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                    border-radius: 3px;
+                    color: #555555;
+                    font-size: 13px;
+                    padding-bottom: 1px;
+                }
+                QPushButton:hover {
+                    color: #ffd54f;
+                    background-color: rgba(255, 213, 79, 0.16);
+                }
+            """)
+        self.btn_star.clicked.connect(lambda: self.quickTargetToggled.emit(self.cid))
+
+        self.btn_delete = QPushButton("✕")
+        self.btn_delete.setFixedSize(22, 22)
+        self.btn_delete.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_delete.setToolTip("Удалить мудборд")
+        self.btn_delete.setAcceptDrops(False)
+        self.btn_delete.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 3px;
+                color: #555555;
+                font-size: 12px;
+                font-weight: bold;
+                padding-bottom: 1px;
+            }
+            QPushButton:hover {
+                color: #ef5350;
+                background-color: rgba(239, 83, 80, 0.2);
+            }
+        """)
+        self.btn_delete.clicked.connect(lambda: self.deleteRequested.emit(self.cid))
+
+        layout.addWidget(self.thumb_label)
+        layout.addLayout(text_layout, 1)
+        layout.addWidget(self.btn_star)
+        layout.addWidget(self.btn_delete)
+
+        self.update_styles()
+
+    def set_selected(self, selected: bool):
+        self.is_selected = selected
+        self.update_styles()
+
+    def update_styles(self):
+        if self.is_selected:
+            self.name_label.setStyleSheet("color: #ffffff; font-size: 13px; font-weight: bold; background: transparent;")
+            self.count_label.setStyleSheet("color: #d0e4ff; font-size: 11px; background: transparent;")
+        else:
+            self.name_label.setStyleSheet("color: #e2e4e8; font-size: 13px; font-weight: 500; background: transparent;")
+            self.count_label.setStyleSheet("color: #727885; font-size: 11px; background: transparent;")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.rowClicked.emit(self.cid)
+        super().mousePressEvent(event)
 
 
 class CollectionsListWidget(QListWidget):
@@ -43,8 +198,8 @@ class CollectionsListWidget(QListWidget):
                 padding: 2px;
             }
             QListWidget::item {
-                min-height: 38px;
-                padding: 6px 10px;
+                min-height: 40px;
+                padding: 0px 4px;
                 border-radius: 6px;
                 color: #e2e4e8;
                 font-size: 13px;
@@ -53,7 +208,7 @@ class CollectionsListWidget(QListWidget):
                 margin-bottom: 4px;
             }
             QListWidget::item:hover {
-                background-color: #252831;
+                background-color: #242730;
                 border-color: #3d4250;
                 color: #fff;
             }
@@ -307,21 +462,25 @@ class CollectionsPanel(QWidget):
             for col in collections:
                 cid = col["id"]
                 is_target = (cid == target_id)
-                prefix = "★ " if is_target else ""
                 count = col["asset_count"]
-                item_text = f"{prefix}{col['name']}  ·  {count}"
 
-                item = QListWidgetItem(item_text)
+                item = QListWidgetItem()
                 item.setSizeHint(QSize(0, 44))
                 item.setData(Qt.ItemDataRole.UserRole, cid)
                 item.setToolTip(f"{col['name']}\nИзображений: {count}" + ("\n(Quick Target: Ctrl+B)" if is_target else ""))
 
-                # Set cover thumbnail if available
-                thumb_path = col.get("cover_thumbnail_path")
-                if thumb_path and Path(thumb_path).exists():
-                    item.setIcon(QIcon(str(thumb_path)))
-
                 self.list_widget.addItem(item)
+
+                row_widget = CollectionRowWidget(
+                    collection_data=col,
+                    is_quick_target=is_target,
+                    is_selected=(cid == self._current_selected_id),
+                    parent=self.list_widget
+                )
+                row_widget.rowClicked.connect(self._on_row_clicked)
+                row_widget.quickTargetToggled.connect(self._on_row_quick_target_toggled)
+                row_widget.deleteRequested.connect(self._on_row_delete_requested)
+                self.list_widget.setItemWidget(item, row_widget)
 
                 if cid == self._current_selected_id:
                     self.list_widget.setCurrentItem(item)
@@ -333,17 +492,34 @@ class CollectionsPanel(QWidget):
             if quick_target_name:
                 self.hint_label.setText(f"Ctrl+B → {quick_target_name}\nИли перетащите кадры в этот блок.")
             else:
-                self.hint_label.setText("Ctrl+B: назначьте Quick Target\nИли перетащите кадры в этот блок.")
+                self.hint_label.setText("Ctrl+B: назначьте Quick Target (★)\nИли перетащите кадры в этот блок.")
+
+    def _on_row_clicked(self, cid: int):
+        self._current_selected_id = cid
+        for i in range(self.list_widget.count()):
+            it = self.list_widget.item(i)
+            if it.data(Qt.ItemDataRole.UserRole) == cid:
+                self.list_widget.setCurrentItem(it)
+                break
+        self._update_rows_selected_state()
+        self.btn_show_all.show()
+        self.collectionSelected.emit(cid)
 
     def _on_item_clicked(self, item: QListWidgetItem):
         cid = item.data(Qt.ItemDataRole.UserRole)
-        self._current_selected_id = cid
-        self.btn_show_all.show()
-        self.collectionSelected.emit(cid)
+        self._on_row_clicked(cid)
+
+    def _update_rows_selected_state(self):
+        for i in range(self.list_widget.count()):
+            it = self.list_widget.item(i)
+            w = self.list_widget.itemWidget(it)
+            if isinstance(w, CollectionRowWidget):
+                w.set_selected(it.data(Qt.ItemDataRole.UserRole) == self._current_selected_id)
 
     def clear_selection(self):
         self._current_selected_id = None
         self.list_widget.clearSelection()
+        self._update_rows_selected_state()
         self.btn_show_all.hide()
         self.collectionCleared.emit()
 
@@ -362,6 +538,37 @@ class CollectionsPanel(QWidget):
             except Exception as e:
                 QMessageBox.warning(self, "Ошибка", str(e))
 
+    def _on_row_quick_target_toggled(self, cid: int):
+        current_target = self.repository.get_quick_target()
+        col = self.repository.get_collection(cid)
+        name = col["name"] if col else "Набор"
+        if current_target == cid:
+            self.repository.set_quick_target(None)
+            self.statusNotice.emit(f"Quick Target снят с '{name}'")
+        else:
+            self.repository.set_quick_target(cid)
+            self.statusNotice.emit(f"Quick Target назначен: '{name}' (Ctrl+B)")
+        self.reload()
+
+    def _on_row_delete_requested(self, cid: int):
+        col = self.repository.get_collection(cid)
+        if not col:
+            return
+        ans = QMessageBox.question(
+            self,
+            "Удалить мудборд?",
+            f"Удалить мудборд '{col['name']}'?\n\nВсе изображения останутся в общей библиотеке.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if ans == QMessageBox.StandardButton.Yes:
+            if self._current_selected_id == cid:
+                self.clear_selection()
+            self.repository.delete_collection(cid)
+            self.reload()
+            self.contentsChanged.emit()
+            self.statusNotice.emit(f"Мудборд '{col['name']}' удален")
+
     def add_assets_to_collection(self, collection_id: int, asset_ids: List[int]):
         if not asset_ids:
             return
@@ -379,6 +586,12 @@ class CollectionsPanel(QWidget):
             else:
                 msg = f"Все выбранные изображения ({len(asset_ids)}) уже есть в наборе '{col_name}'"
 
+            # Auto-sync moodboard.html if project directory is bound
+            if col and col.get("export_dir"):
+                synced = sync_collection_web_moodboard(self.repository, collection_id)
+                if synced:
+                    msg += " (moodboard.html синхронизирован)"
+
             self.reload()
             self.contentsChanged.emit()
             self.statusNotice.emit(msg)
@@ -392,7 +605,7 @@ class CollectionsPanel(QWidget):
             QMessageBox.information(
                 self,
                 "Quick Target",
-                "Сначала выберите активный мудборд (правый клик по строке набора → «Сделать Quick Target»)."
+                "Сначала выберите активный мудборд (нажмите иконку ★ в строке набора)."
             )
             return
         self.add_assets_to_collection(target_id, asset_ids)
@@ -405,7 +618,14 @@ class CollectionsPanel(QWidget):
             self.repository.remove_assets(collection_id, added_ids)
             col = self.repository.get_collection(collection_id)
             name = col["name"] if col else "Набор"
-            self.statusNotice.emit(f"Отменено добавление {len(added_ids)} кадров в '{name}'")
+            msg = f"Отменено добавление {len(added_ids)} кадров в '{name}'"
+
+            # Auto-sync moodboard.html if project directory is bound
+            if col and col.get("export_dir"):
+                sync_collection_web_moodboard(self.repository, collection_id)
+                msg += " (moodboard.html синхронизирован)"
+
+            self.statusNotice.emit(msg)
             self.last_added = None
             self.btn_undo.setEnabled(False)
             self.reload()
@@ -436,7 +656,27 @@ class CollectionsPanel(QWidget):
         act_target.setEnabled(not is_target)
 
         menu.addSeparator()
-        act_export = menu.addAction("📁 Экспортировать подборку…")
+
+        export_dir = col.get("export_dir")
+        moodboard_file = Path(export_dir) / "moodboard.html" if export_dir else None
+        has_moodboard = moodboard_file and moodboard_file.exists()
+
+        if has_moodboard:
+            act_open_html = menu.addAction("🌐 Открыть moodboard.html")
+        else:
+            act_open_html = None
+
+        if export_dir and Path(export_dir).exists():
+            act_open_dir = menu.addAction("📂 Открыть папку проекта")
+            act_sync_html = menu.addAction("🔄 Синхронизировать moodboard.html")
+        else:
+            act_open_dir = None
+            act_sync_html = None
+
+        act_bind_dir = menu.addAction("📁 Привязать папку проекта…")
+        act_export = menu.addAction("⚙️ Экспорт / Синхронизация…")
+
+        menu.addSeparator()
         act_rename = menu.addAction("✏️ Переименовать…")
         act_clear_cover = menu.addAction("Сбросить обложку")
         act_clear_cover.setEnabled(bool(col.get("cover_asset_id")))
@@ -450,6 +690,32 @@ class CollectionsPanel(QWidget):
             self.repository.set_quick_target(cid)
             self.reload()
             self.statusNotice.emit(f"Quick Target назначен: '{col['name']}'")
+
+        elif action == act_open_html and has_moodboard:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(moodboard_file)))
+
+        elif action == act_open_dir and export_dir:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(export_dir)))
+
+        elif action == act_sync_html and export_dir:
+            synced = sync_collection_web_moodboard(self.repository, cid)
+            if synced:
+                self.statusNotice.emit(f"moodboard.html синхронизирован в '{export_dir}'")
+            else:
+                QMessageBox.warning(self, "Ошибка синхронизации", "Не удалось обновить moodboard.html")
+
+        elif action == act_bind_dir:
+            chosen = QFileDialog.getExistingDirectory(
+                self,
+                "Выберите рабочую папку проекта",
+                export_dir or str(Path.home()),
+                QFileDialog.Option.ShowDirsOnly
+            )
+            if chosen:
+                self.repository.remember_export_dir(cid, chosen)
+                sync_collection_web_moodboard(self.repository, cid, chosen)
+                self.reload()
+                self.statusNotice.emit(f"Папка проекта привязана: {chosen}")
 
         elif action == act_export:
             dlg = ExportCollectionDialog(cid, self.repository, self)
@@ -474,17 +740,4 @@ class CollectionsPanel(QWidget):
             self.reload()
 
         elif action == act_delete:
-            ans = QMessageBox.question(
-                self,
-                "Удалить мудборд?",
-                f"Удалить мудборд '{col['name']}'?\n\nВсе изображения останутся в общей библиотеке.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if ans == QMessageBox.StandardButton.Yes:
-                if self._current_selected_id == cid:
-                    self.clear_selection()
-                self.repository.delete_collection(cid)
-                self.reload()
-                self.contentsChanged.emit()
-                self.statusNotice.emit(f"Мудборд '{col['name']}' удален")
+            self._on_row_delete_requested(cid)

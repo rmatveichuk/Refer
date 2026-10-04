@@ -25,6 +25,12 @@ class BoardItemSnapshot:
     title: str
     author: str
     is_cover: bool
+    original_url: str = ""
+    project_url: str = ""
+    project_location: str = ""
+    source_domain: str = ""
+    width: int = 0
+    height: int = 0
 
 
 @dataclass(frozen=True)
@@ -344,13 +350,17 @@ class CollectionRepository:
 
             rows = conn.execute("""
                 SELECT 
-                    a.id, a.local_path, a.thumbnail_path,
+                    a.id, a.local_path, a.thumbnail_path, a.original_url, a.width, a.height,
                     COALESCE(p.title, '') AS project_title,
                     COALESCE(p.author, '') AS project_author,
+                    COALESCE(p.url, '') AS project_url,
+                    COALESCE(p.location, '') AS project_location,
+                    COALESCE(s.domain, '') AS source_domain,
                     ca.is_cover
                 FROM collection_assets ca
                 JOIN assets a ON a.id = ca.asset_id
                 LEFT JOIN projects p ON p.id = a.project_id
+                LEFT JOIN sources s ON s.id = a.source_id
                 WHERE ca.collection_id = ?
                 ORDER BY ca.position ASC
             """, (collection_id,)).fetchall()
@@ -363,7 +373,13 @@ class CollectionRepository:
                     thumbnail_path=r["thumbnail_path"] or "",
                     title=r["project_title"],
                     author=r["project_author"],
-                    is_cover=bool(r["is_cover"])
+                    is_cover=bool(r["is_cover"]),
+                    original_url=r["original_url"] or "",
+                    project_url=r["project_url"] or "",
+                    project_location=r["project_location"] or "",
+                    source_domain=r["source_domain"] or "",
+                    width=r["width"] or 0,
+                    height=r["height"] or 0
                 ))
 
             return BoardSnapshot(
