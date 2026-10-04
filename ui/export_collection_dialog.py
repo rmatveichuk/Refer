@@ -29,6 +29,7 @@ class ExportWorker(QThread):
         export_format: str,
         export_mode: str,
         use_numbered_names: bool,
+        download_originals: bool = True,
         parent=None
     ):
         super().__init__(parent)
@@ -37,6 +38,7 @@ class ExportWorker(QThread):
         self.export_format = export_format
         self.export_mode = export_mode
         self.use_numbered_names = use_numbered_names
+        self.download_originals = download_originals
         self.cancel_event = Event()
 
     def run(self):
@@ -47,6 +49,7 @@ class ExportWorker(QThread):
                 format=self.export_format,
                 mode=self.export_mode,
                 use_numbered_names=self.use_numbered_names,
+                download_originals=self.download_originals,
                 cancel=self.cancel_event,
                 progress=lambda n, total, title: self.progress.emit(n, total, title)
             )
@@ -142,6 +145,14 @@ class ExportCollectionDialog(QDialog):
         mode_row.addWidget(self.mode_combo, 1)
         mode_inner_layout.addLayout(mode_row)
 
+        self.download_originals_check = QCheckBox("Скачивать оригиналы в полном разрешении (с сайтов источников)")
+        self.download_originals_check.setChecked(True)
+        self.download_originals_check.setToolTip(
+            "Загружает исходные мастер-файлы высокого разрешения (2000px+ с ArchDaily, Behance и др.) "
+            "вместо локальных 1024px превью. При отсутствии интернета или сбое автоматически сохранит кеш."
+        )
+        mode_inner_layout.addWidget(self.download_originals_check)
+
         self.numbered_check = QCheckBox("Нумеровать файлы (001_Автор_Проект.ext)")
         self.numbered_check.setChecked(True)
         mode_inner_layout.addWidget(self.numbered_check)
@@ -217,6 +228,7 @@ class ExportCollectionDialog(QDialog):
         self.path_input.setEnabled(False)
         self.format_combo.setEnabled(False)
         self.mode_combo.setEnabled(False)
+        self.download_originals_check.setEnabled(False)
         self.numbered_check.setEnabled(False)
         self.btn_cancel.setText("Отмена")
 
@@ -229,6 +241,7 @@ class ExportCollectionDialog(QDialog):
         fmt = self.format_combo.currentData()
         mode = "web" if fmt == "web_html" else self.mode_combo.currentData()
         use_num = False if fmt == "web_html" else self.numbered_check.isChecked()
+        download_orig = False if fmt == "web_html" else self.download_originals_check.isChecked()
 
         self.worker = ExportWorker(
             board=self.board_snapshot,
@@ -236,6 +249,7 @@ class ExportCollectionDialog(QDialog):
             export_format=fmt,
             export_mode=mode,
             use_numbered_names=use_num,
+            download_originals=download_orig,
             parent=self
         )
         self.worker.progress.connect(self._on_progress)
@@ -254,7 +268,15 @@ class ExportCollectionDialog(QDialog):
             self.status_label.setText(f"✅ Готово! Создан moodboard.html ({result['count']} референсов, 0 МБ на диске)")
             self.btn_open.setText("🌐 Открыть moodboard.html")
         else:
-            modes_str = ", ".join(f"{k}: {v}" for k, v in result.get("modes", {}).items())
+            modes = result.get("modes", {})
+            parts = []
+            if "downloaded_original" in modes:
+                parts.append(f"скачано оригиналов: {modes['downloaded_original']}")
+            if "copy" in modes:
+                parts.append(f"копий: {modes['copy']}")
+            if "hardlink" in modes:
+                parts.append(f"hardlink: {modes['hardlink']}")
+            modes_str = ", ".join(parts) if parts else ", ".join(f"{k}: {v}" for k, v in modes.items())
             self.status_label.setText(f"✅ Готово! Экспортировано {result['count']} файлов ({modes_str})")
             self.btn_open.setText("Открыть результат")
         self.btn_open.setEnabled(True)
@@ -269,6 +291,7 @@ class ExportCollectionDialog(QDialog):
         self.path_input.setEnabled(True)
         self.format_combo.setEnabled(True)
         self.mode_combo.setEnabled(True)
+        self.download_originals_check.setEnabled(True)
         self.numbered_check.setEnabled(True)
         self.btn_cancel.setText("Закрыть")
 

@@ -266,12 +266,15 @@ class TestCollections(unittest.TestCase):
         self.assertIsNotNone(dlg.mode_widget)
         self.assertTrue(dlg.mode_widget.isHidden())  # web_html по умолчанию скрывает mode_widget
         self.assertFalse(dlg.web_info_label.isHidden())
+        self.assertIsNotNone(dlg.download_originals_check)
+        self.assertTrue(dlg.download_originals_check.isChecked())
 
         # Переключение на offline_html
         idx = dlg.format_combo.findData("offline_html")
         dlg.format_combo.setCurrentIndex(idx)
         self.assertFalse(dlg.mode_widget.isHidden())
         self.assertTrue(dlg.web_info_label.isHidden())
+        self.assertFalse(dlg.download_originals_check.isHidden())
 
         dlg.close()
 

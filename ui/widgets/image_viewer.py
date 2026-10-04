@@ -164,6 +164,11 @@ class ImageViewerWindow(QMainWindow):
         self.btn_open_folder.clicked.connect(self._open_in_folder)
         toolbar.addWidget(self.btn_open_folder)
 
+        self.btn_download = QPushButton("💾 Скачать оригинал")
+        self.btn_download.setToolTip("Сохранить файл оригинального высокого разрешения на диск")
+        self.btn_download.clicked.connect(self._download_original)
+        toolbar.addWidget(self.btn_download)
+
         toolbar.addSeparator()
 
         btn_project_label = "📁 Проект" if config.CURRENT_LANGUAGE == "ru" else "📁 Project"
@@ -350,6 +355,60 @@ class ImageViewerWindow(QMainWindow):
                 subprocess.run(['xdg-open', os.path.dirname(path)])
         else:
             logger.warning(f"Файл не найден на диске: {path}")
+
+    def _download_original(self):
+        """Сохраняет оригинальный мастер-файл текущего изображения."""
+        if self.current_index < 0 or self.current_index >= len(self.assets):
+            return
+        from pathlib import Path
+        import shutil
+        from export.moodboard_exporter import download_web_image, sanitize_filename
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+        asset = self.assets[self.current_index]
+        author = getattr(asset, "project_author", "") or getattr(asset, "author", "") or ""
+        title = getattr(asset, "project_title", "") or getattr(asset, "title", "") or ""
+        base = f"{sanitize_filename(author, 20)}_{sanitize_filename(title, 30)}".strip("_")
+        default_name = f"{base or f'asset_{asset.id}'}.jpg"
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить оригинал изображения",
+            str(Path.home() / "Downloads" / default_name),
+            "Images (*.jpg *.png *.webp *.jpeg)"
+        )
+        if not save_path:
+            return
+
+        target = Path(save_path)
+        self.status.showMessage("⏳ Скачивание оригинала в полном качестве…")
+
+        success = False
+        msg = ""
+        if asset.original_url and asset.original_url.startswith("http"):
+            dl = download_web_image(asset.original_url, target.with_suffix(""), referer=getattr(asset, "project_url", ""))
+            if dl and dl.exists():
+                success = True
+                msg = f"✅ Оригинал сохранён: {dl.name} ({dl.stat().st_size // 1024} КБ)"
+            else:
+                fallback = asset.local_path or asset.thumbnail_path
+                if fallback and Path(fallback).exists():
+                    shutil.copy2(fallback, target)
+                    success = True
+                    msg = f"⚠️ Сохранена копия из кеша: {target.name}"
+        elif asset.local_path and Path(asset.local_path).exists():
+            shutil.copy2(asset.local_path, target)
+            success = True
+            msg = f"✅ Файл скопирован: {target.name}"
+        elif asset.thumbnail_path and Path(asset.thumbnail_path).exists():
+            shutil.copy2(asset.thumbnail_path, target)
+            success = True
+            msg = f"✅ Сохранена копия из кеша: {target.name}"
+
+        if success:
+            self.status.showMessage(msg, 6000)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось скачать оригинальный файл.")
 
     def _update_ui_state(self):
         if self.current_index < 0 or self.current_index >= len(self.assets):

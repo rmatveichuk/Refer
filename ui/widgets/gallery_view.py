@@ -379,6 +379,10 @@ class GalleryView(QListView):
                 needed_action.triggered.connect(lambda: self._batch_ai_analyze(needed_assets))
 
             menu.addSeparator()
+            download_batch_action = menu.addAction(f"💾 Скачать оригиналы ({len(selected_assets)})…")
+            download_batch_action.triggered.connect(lambda: self._download_assets_batch(selected_assets))
+
+            menu.addSeparator()
             
             delete_action = menu.addAction(f"Скрыть из библиотеки ({len(selected_assets)})")
             delete_action.triggered.connect(lambda: self.parent_window._delete_assets_batch(selected_assets) if self.parent_window else None)
@@ -389,6 +393,10 @@ class GalleryView(QListView):
             view_action.triggered.connect(lambda: self._on_item_clicked(index))
             favorite_action = menu.addAction("Убрать из избранного" if asset.is_favorite else "В избранное")
             favorite_action.triggered.connect(lambda: self._toggle_favorite(asset))
+
+            download_action = menu.addAction("💾 Скачать оригинал…")
+            download_action.triggered.connect(lambda: self._download_single_asset(asset))
+
             if asset.local_path or asset.thumbnail_path:
                 folder_action = menu.addAction("Открыть папку изображения")
                 folder_action.triggered.connect(lambda: self._open_image_folder(asset))
@@ -403,6 +411,116 @@ class GalleryView(QListView):
             delete_action.triggered.connect(lambda: self.parent_window._delete_assets_batch([asset]) if self.parent_window else None)
         
         menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _download_single_asset(self, asset):
+        """Скачивает оригинальный мастер-файл ассета на диск."""
+        from export.moodboard_exporter import download_web_image, sanitize_filename
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import shutil
+
+        author = getattr(asset, "project_author", "") or getattr(asset, "author", "") or ""
+        title = getattr(asset, "project_title", "") or getattr(asset, "title", "") or ""
+        base = f"{sanitize_filename(author, 20)}_{sanitize_filename(title, 30)}".strip("_")
+        default_name = f"{base or f'asset_{asset.id}'}.jpg"
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить оригинал изображения",
+            str(Path.home() / "Downloads" / default_name),
+            "Images (*.jpg *.png *.webp *.jpeg)"
+        )
+        if not save_path:
+            return
+
+        target = Path(save_path)
+        if self.parent_window and hasattr(self.parent_window, "status_label"):
+            self.parent_window.status_label.setText(f"⏳ Скачивание оригинала: {target.name}…")
+
+        success = False
+        msg = ""
+        if asset.original_url and asset.original_url.startswith("http"):
+            dl = download_web_image(asset.original_url, target.with_suffix(""), referer=getattr(asset, "project_url", ""))
+            if dl and dl.exists():
+                success = True
+                msg = f"✅ Оригинал сохранён: {dl.name} ({dl.stat().st_size // 1024} КБ)"
+            else:
+                fallback = asset.local_path or asset.thumbnail_path
+                if fallback and Path(fallback).exists():
+                    shutil.copy2(fallback, target)
+                    success = True
+                    msg = f"⚠️ Сохранена копия из кеша: {target.name}"
+        elif asset.local_path and Path(asset.local_path).exists():
+            shutil.copy2(asset.local_path, target)
+            success = True
+            msg = f"✅ Файл скопирован: {target.name}"
+        elif asset.thumbnail_path and Path(asset.thumbnail_path).exists():
+            shutil.copy2(asset.thumbnail_path, target)
+            success = True
+            msg = f"✅ Сохранена копия из кеша: {target.name}"
+
+        if success:
+            if self.parent_window and hasattr(self.parent_window, "status_label"):
+                self.parent_window.status_label.setText(msg)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось скачать оригинальный файл.")
+
+    def _download_assets_batch(self, assets):
+        """Пакетно скачивает мастер-файлы выбранных ассетов в указанную папку."""
+        from export.moodboard_exporter import download_web_image, sanitize_filename
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox, QProgressDialog
+        import shutil
+
+        target_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите папку для сохранения оригиналов",
+            str(Path.home() / "Downloads"),
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if not target_dir:
+            return
+
+        out_path = Path(target_dir)
+        total = len(assets)
+        dlg = QProgressDialog("Скачивание оригиналов…", "Отмена", 0, total, self)
+        dlg.setWindowTitle("Загрузка оригиналов")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.show()
+
+        downloaded = 0
+        copied = 0
+
+        for i, a in enumerate(assets, 1):
+            if dlg.wasCanceled():
+                break
+
+            author = getattr(a, "project_author", "") or getattr(a, "author", "") or ""
+            title = getattr(a, "project_title", "") or getattr(a, "title", "") or ""
+            base = f"{i:03d}_{sanitize_filename(author, 20)}_{sanitize_filename(title, 30)}".strip("_")
+            dlg.setLabelText(f"Скачивание {i}/{total}: {base}")
+            dlg.setValue(i - 1)
+
+            target_base = out_path / base
+            if a.original_url and a.original_url.startswith("http"):
+                dl = download_web_image(a.original_url, target_base, referer=getattr(a, "project_url", ""))
+                if dl and dl.exists():
+                    downloaded += 1
+                    continue
+
+            fallback = a.local_path or a.thumbnail_path
+            if fallback and Path(fallback).exists():
+                ext = Path(fallback).suffix.lower() or ".webp"
+                shutil.copy2(fallback, target_base.with_suffix(ext))
+                copied += 1
+
+        dlg.setValue(total)
+        msg = f"✅ Сохранено в {out_path.name}: {downloaded} оригиналов, {copied} из кеша"
+        if self.parent_window and hasattr(self.parent_window, "status_label"):
+            self.parent_window.status_label.setText(msg)
+        QMessageBox.information(
+            self,
+            "Готово",
+            f"Файлы успешно сохранены в папку:\n{out_path}\n\n• Скачано оригиналов в полном разрешении: {downloaded}\n• Сохранено из локального кеша: {copied}"
+        )
 
     def _open_image_folder(self, asset):
         from PyQt6.QtGui import QDesktopServices

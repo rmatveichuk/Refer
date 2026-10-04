@@ -11,11 +11,13 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from threading import Event
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from typing import Optional, Callable, Dict, Any
 
+import requests
 from PIL import Image, ImageOps
 from database.collection_repository import BoardSnapshot
+from scrapers.cdn_resolver import resolve_master_url
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +35,88 @@ def sanitize_filename(name: str, max_length: int = 50) -> str:
     return slug[:max_length] or 'item'
 
 
+def download_web_image(
+    url: str,
+    target_path_without_ext: Path,
+    cancel: Optional[Event] = None,
+    timeout: int = 30,
+    referer: str = ""
+) -> Optional[Path]:
+    """
+    Загружает оригинальное изображение в полном качестве с CDN источника.
+    Автоматически нормализует URL к мастер-разрешению (large_jpg, без обрезки).
+    Возвращает итоговый Path с правильным расширением файла или None в случае сбоя.
+    """
+    if not url or not url.startswith("http"):
+        return None
+
+    master_url = resolve_master_url(url)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    }
+    if referer and referer.startswith("http"):
+        headers["Referer"] = referer
+    elif "archdaily" in master_url:
+        headers["Referer"] = "https://www.archdaily.com/"
+    elif "behance" in master_url:
+        headers["Referer"] = "https://www.behance.net/"
+
+    url_path = urlsplit(master_url).path
+    ext = os.path.splitext(url_path)[1].lower()
+    if not ext or ext not in EXTENSIONS:
+        ext = ".jpg"
+
+    final_path = target_path_without_ext.with_suffix(ext)
+    tmp_path = final_path.with_suffix(f"{ext}.tmp_{uuid.uuid4().hex[:6]}")
+
+    try:
+        with requests.get(master_url, stream=True, timeout=timeout, headers=headers) as resp:
+            if resp.status_code != 200:
+                logger.warning(f"Не удалось скачать оригинал {master_url}: HTTP {resp.status_code}")
+                return None
+
+            content_type = (resp.headers.get("Content-Type") or "").lower()
+            if "png" in content_type:
+                ext = ".png"
+            elif "webp" in content_type:
+                ext = ".webp"
+            elif "jpeg" in content_type or "jpg" in content_type:
+                ext = ".jpg"
+
+            final_path = target_path_without_ext.with_suffix(ext)
+
+            total_downloaded = 0
+            with open(tmp_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=64 * 1024):
+                    if cancel and cancel.is_set():
+                        tmp_path.unlink(missing_ok=True)
+                        return None
+                    if chunk:
+                        f.write(chunk)
+                        total_downloaded += len(chunk)
+
+            if total_downloaded < 1024:
+                tmp_path.unlink(missing_ok=True)
+                return None
+
+            tmp_path.replace(final_path)
+            return final_path
+
+    except Exception as e:
+        logger.warning(f"Ошибка скачивания оригинала {master_url}: {e}")
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        return None
+
+
 def export_moodboard(
     board: BoardSnapshot,
     target_dir: str | Path,
     format: str = "web_html",
     mode: str = "web",
     use_numbered_names: bool = True,
+    download_originals: bool = True,
     cancel: Optional[Event] = None,
     progress: Optional[Callable[[int, int, str], None]] = None
 ) -> Dict[str, Any]:
@@ -104,21 +182,6 @@ def export_moodboard(
         for n, item in enumerate(board.items, 1):
             check_cancel()
 
-            # Determine source path: prefer local_path if exists, otherwise thumbnail_path
-            src = None
-            if item.local_path and Path(item.local_path).exists():
-                src = Path(item.local_path).resolve()
-            elif item.thumbnail_path and Path(item.thumbnail_path).exists():
-                src = Path(item.thumbnail_path).resolve()
-
-            if not src or not src.is_file():
-                logger.warning(f"Файл для ассета #{item.id} не найден на диске, пропуск.")
-                continue
-
-            suffix = src.suffix.lower()
-            if not suffix:
-                suffix = ".webp"
-
             # Clean name with author / project
             meta_parts = []
             if item.author:
@@ -130,44 +193,71 @@ def export_moodboard(
             if not meta_slug:
                 meta_slug = f"asset_{item.id}"
 
-            if use_numbered_names:
-                filename = f"{n:03d}_{meta_slug}{suffix}"
+            base_name = f"{n:03d}_{meta_slug}" if use_numbered_names else f"{meta_slug}_{item.id}"
+            target_without_ext = images_dir / base_name
+
+            downloaded_file = None
+            if download_originals and item.original_url and item.original_url.startswith("http"):
+                progress(n, total_items, f"Скачивание #{n}/{total_items}: {meta_slug}…")
+                downloaded_file = download_web_image(
+                    url=item.original_url,
+                    target_path_without_ext=target_without_ext,
+                    cancel=cancel,
+                    referer=item.project_url
+                )
+
+            if downloaded_file and downloaded_file.exists():
+                dst = downloaded_file
+                filename = dst.name
+                rel_img = f"images/{filename}"
+                actual_mode = "downloaded_original"
             else:
-                filename = f"{src.stem}_{item.id}{suffix}"
+                # Fallback: prefer local_path if exists, otherwise thumbnail_path
+                src = None
+                if item.local_path and Path(item.local_path).exists():
+                    src = Path(item.local_path).resolve()
+                elif item.thumbnail_path and Path(item.thumbnail_path).exists():
+                    src = Path(item.thumbnail_path).resolve()
 
-            rel_img = f"images/{filename}"
-            dst = stage_dir / rel_img
-            actual_mode = mode
+                if not src or not src.is_file():
+                    logger.warning(f"Файл для ассета #{item.id} не найден на диске, пропуск.")
+                    continue
 
-            # Perform linking or copying
-            if mode in {"hardlink", "auto"}:
-                try:
-                    os.link(src, dst)
-                    actual_mode = "hardlink"
-                except OSError:
-                    if mode == "hardlink":
-                        raise
-                    actual_mode = "copy"
+                suffix = src.suffix.lower() or ".webp"
+                filename = f"{base_name}{suffix}"
+                rel_img = f"images/{filename}"
+                dst = stage_dir / rel_img
+                actual_mode = mode
 
-            elif mode == "symlink":
-                os.symlink(src, dst)
-                actual_mode = "symlink"
+                # Perform linking or copying
+                if mode in {"hardlink", "auto"}:
+                    try:
+                        os.link(src, dst)
+                        actual_mode = "hardlink"
+                    except OSError:
+                        if mode == "hardlink":
+                            raise
+                        actual_mode = "copy"
 
-            if actual_mode == "copy":
-                with src.open("rb") as inp, dst.open("xb") as out:
-                    while True:
-                        check_cancel()
-                        buf = inp.read(4 * 1024 * 1024)
-                        if not buf:
-                            break
-                        out.write(buf)
-                try:
-                    shutil.copystat(src, dst)
-                except Exception:
-                    pass
+                elif mode == "symlink":
+                    os.symlink(src, dst)
+                    actual_mode = "symlink"
+
+                if actual_mode == "copy":
+                    with src.open("rb") as inp, dst.open("xb") as out:
+                        while True:
+                            check_cancel()
+                            buf = inp.read(4 * 1024 * 1024)
+                            if not buf:
+                                break
+                            out.write(buf)
+                    try:
+                        shutil.copystat(src, dst)
+                    except Exception:
+                        pass
 
             # HTML previews and cards
-            if format == "html":
+            if format in {"html", "offline_html"}:
                 thumb_rel = f"previews/{n:03d}.jpg"
                 thumb_dest = stage_dir / thumb_rel
 
@@ -200,7 +290,7 @@ def export_moodboard(
                 "title": item.title,
                 "author": item.author,
                 "file": rel_img,
-                "source_file": src.name,
+                "source_file": dst.name if downloaded_file else (src.name if src else ""),
                 "mode": actual_mode,
                 "is_cover": item.is_cover
             })
@@ -223,7 +313,7 @@ def export_moodboard(
             json.dump(manifest, f, ensure_ascii=False, indent=2)
 
         # Write index.html if html format
-        if format == "html":
+        if format in {"html", "offline_html"}:
             escaped_name = html.escape(board.name)
             escaped_desc = html.escape(board.description) if board.description else ""
             desc_html = f'<p class="meta-desc">{escaped_desc}</p>' if escaped_desc else ""
@@ -248,7 +338,7 @@ def export_moodboard(
 
         return {
             "directory": str(final_dir),
-            "entrypoint": str(final_dir / "index.html" if format == "html" else final_dir),
+            "entrypoint": str(final_dir / "index.html" if format in {"html", "offline_html"} else final_dir),
             "count": len(records),
             "modes": modes_summary
         }
