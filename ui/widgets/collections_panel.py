@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from PyQt6.QtCore import Qt, QSize, QPointF, pyqtSignal, QSignalBlocker, QUrl
+from PyQt6.QtCore import Qt, QSize, QPointF, pyqtSignal, QSignalBlocker, QUrl, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QFont, QDesktopServices, QPainter, QPolygonF, QPen
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -381,9 +381,68 @@ class CollectionsPanel(QWidget):
         self.repository = repository
         self.last_added: Optional[tuple[int, list[int]]] = None
         self._current_selected_id: Optional[int] = None
+        self._last_data_version: Optional[int] = None
 
         self._init_ui()
         self.reload()
+        self._init_auto_sync_timer()
+
+    def _init_auto_sync_timer(self):
+        """Периодически проверяет изменения базы данных из внешних процессов (например, MCP)."""
+        self._observer_conn: Optional[Any] = None
+        conn = self._get_observer_conn()
+        if conn:
+            try:
+                row = conn.execute("PRAGMA data_version;").fetchone()
+                self._last_data_version = row[0] if row else None
+            except Exception:
+                self._last_data_version = None
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setInterval(1500)
+        self._sync_timer.timeout.connect(self._check_external_changes)
+        self._sync_timer.start()
+
+    def _get_observer_conn(self):
+        if self._observer_conn is None:
+            try:
+                import sqlite3
+                db_path = getattr(self.repository.db, "db_path", None)
+                if not db_path:
+                    return None
+                conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=1.0)
+                conn.execute("PRAGMA journal_mode=WAL;")
+                self._observer_conn = conn
+            except Exception as e:
+                logger.debug(f"Failed to open observer connection: {e}")
+                self._observer_conn = None
+        return self._observer_conn
+
+    def _close_observer_conn(self):
+        if self._observer_conn is not None:
+            try:
+                self._observer_conn.close()
+            except Exception:
+                pass
+            self._observer_conn = None
+
+    def _check_external_changes(self):
+        try:
+            conn = self._get_observer_conn()
+            if not conn:
+                return
+            row = conn.execute("PRAGMA data_version;").fetchone()
+            if not row:
+                return
+            version = row[0]
+            if self._last_data_version is not None and version != self._last_data_version:
+                self._last_data_version = version
+                self.reload()
+                self.contentsChanged.emit()
+            else:
+                self._last_data_version = version
+        except Exception as e:
+            logger.debug(f"Observer error: {e}")
+            self._close_observer_conn()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -543,6 +602,13 @@ class CollectionsPanel(QWidget):
 
                 if is_target:
                     quick_target_name = col["name"]
+
+            existing_ids = {c["id"] for c in collections}
+            if self._current_selected_id is not None and self._current_selected_id not in existing_ids:
+                self._current_selected_id = None
+                self.list_widget.clearSelection()
+                self.btn_show_all.hide()
+                self.collectionCleared.emit()
 
             # Update hint
             if quick_target_name:

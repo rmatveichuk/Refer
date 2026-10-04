@@ -31,6 +31,7 @@ class BoardItemSnapshot:
     source_domain: str = ""
     width: int = 0
     height: int = 0
+    slot_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ class CollectionRepository:
                         asset_id INTEGER NOT NULL,
                         position INTEGER NOT NULL DEFAULT 0,
                         is_cover INTEGER NOT NULL DEFAULT 0,
+                        slot_name TEXT DEFAULT '',
                         added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         PRIMARY KEY (collection_id, asset_id)
                     );
@@ -80,11 +82,16 @@ class CollectionRepository:
 
                     INSERT OR IGNORE INTO quick_target (singleton, collection_id) VALUES (1, NULL);
                 """)
+                # Ensure column exists if table was created in an earlier schema
+                try:
+                    conn.execute("ALTER TABLE collection_assets ADD COLUMN slot_name TEXT DEFAULT '';")
+                except Exception:
+                    pass
                 conn.commit()
         except Exception as e:
             logger.warning(f"Could not auto-ensure collection tables: {e}")
 
-    def create_collection(self, name: str, description: str = "", ids: List[int] = ()) -> int:
+    def create_collection(self, name: str, description: str = "", ids: List[int] = (), slot_name: Optional[str] = None) -> int:
         clean_name = (name or "").strip()
         if not clean_name or len(clean_name) > 120:
             raise ValueError("Название набора должно содержать от 1 до 120 символов.")
@@ -105,7 +112,7 @@ class CollectionRepository:
             collection_id = cur.lastrowid
 
             if ids:
-                self._add_assets_conn(conn, collection_id, ids)
+                self._add_assets_conn(conn, collection_id, ids, slot_name=slot_name)
 
             # Auto-assign Quick Target if none is set
             target = conn.execute("SELECT collection_id FROM quick_target WHERE singleton = 1").fetchone()
@@ -147,7 +154,7 @@ class CollectionRepository:
             conn.execute("UPDATE quick_target SET collection_id = NULL WHERE collection_id = ?", (collection_id,))
             conn.commit()
 
-    def _add_assets_conn(self, conn: sqlite3.Connection, collection_id: int, asset_ids: List[int]) -> List[int]:
+    def _add_assets_conn(self, conn: sqlite3.Connection, collection_id: int, asset_ids: List[int], slot_name: Optional[str] = None) -> List[int]:
         if not asset_ids:
             return []
 
@@ -160,21 +167,32 @@ class CollectionRepository:
 
         added_ids = []
         unique_ids = list(dict.fromkeys(asset_ids))
+        slot = (slot_name or "").strip()
 
         for aid in unique_ids:
-            cur = conn.execute(
-                """INSERT OR IGNORE INTO collection_assets (collection_id, asset_id, position)
-                   VALUES (?, ?, ?)""",
-                (collection_id, aid, pos)
-            )
-            if cur.rowcount > 0:
+            existing = conn.execute(
+                "SELECT 1 FROM collection_assets WHERE collection_id = ? AND asset_id = ?",
+                (collection_id, aid)
+            ).fetchone()
+            if existing:
+                if slot:
+                    conn.execute(
+                        "UPDATE collection_assets SET slot_name = ? WHERE collection_id = ? AND asset_id = ?",
+                        (slot, collection_id, aid)
+                    )
+            else:
+                conn.execute(
+                    """INSERT INTO collection_assets (collection_id, asset_id, position, slot_name)
+                       VALUES (?, ?, ?, ?)""",
+                    (collection_id, aid, pos, slot)
+                )
                 added_ids.append(aid)
                 pos += 1
 
-        if added_ids:
+        if added_ids or slot:
             # If collection has no cover, pick the first added asset as default cover
             cover_check = conn.execute("SELECT cover_asset_id FROM collections WHERE id = ?", (collection_id,)).fetchone()
-            if not cover_check or not cover_check["cover_asset_id"]:
+            if (not cover_check or not cover_check["cover_asset_id"]) and added_ids:
                 first_id = added_ids[0]
                 conn.execute("UPDATE collections SET cover_asset_id = ? WHERE id = ?", (first_id, collection_id))
                 conn.execute("UPDATE collection_assets SET is_cover = 1 WHERE collection_id = ? AND asset_id = ?", (collection_id, first_id))
@@ -183,10 +201,10 @@ class CollectionRepository:
 
         return added_ids
 
-    def add_assets(self, collection_id: int, asset_ids: List[int]) -> List[int]:
+    def add_assets(self, collection_id: int, asset_ids: List[int], slot_name: Optional[str] = None) -> List[int]:
         """Добавляет ассеты в набор с дедупликацией. Возвращает список фактически добавленных ID."""
         with self.db.get_connection() as conn:
-            added = self._add_assets_conn(conn, collection_id, asset_ids)
+            added = self._add_assets_conn(conn, collection_id, asset_ids, slot_name=slot_name)
             conn.commit()
             return added
 
@@ -341,6 +359,26 @@ class CollectionRepository:
                 assets.append(asset)
             return assets
 
+    def get_collection_assets_with_slots(self, collection_id: int) -> List[Dict[str, Any]]:
+        """Возвращает ассеты набора вместе с slot_name и метаданными."""
+        with self.db.get_connection() as conn:
+            rows = conn.execute("""
+                SELECT 
+                    a.id, a.project_id, a.local_path, a.thumbnail_path, a.original_url, a.width, a.height,
+                    COALESCE(p.title, '') AS project_title,
+                    COALESCE(p.author, '') AS project_author,
+                    COALESCE(s.domain, '') AS source_domain,
+                    COALESCE(ca.slot_name, '') AS slot_name,
+                    ca.is_cover, ca.position
+                FROM collection_assets ca
+                JOIN assets a ON ca.asset_id = a.id
+                LEFT JOIN projects p ON a.project_id = p.id
+                LEFT JOIN sources s ON a.source_id = s.id
+                WHERE ca.collection_id = ?
+                ORDER BY ca.position ASC
+            """, (collection_id,)).fetchall()
+            return [dict(r) for r in rows]
+
     def snapshot(self, collection_id: int) -> BoardSnapshot:
         """Снимок состава набора для безопасного экспорта."""
         with self.db.get_connection() as conn:
@@ -356,6 +394,7 @@ class CollectionRepository:
                     COALESCE(p.url, '') AS project_url,
                     COALESCE(p.location, '') AS project_location,
                     COALESCE(s.domain, '') AS source_domain,
+                    COALESCE(ca.slot_name, '') AS slot_name,
                     ca.is_cover
                 FROM collection_assets ca
                 JOIN assets a ON a.id = ca.asset_id
@@ -379,7 +418,8 @@ class CollectionRepository:
                     project_location=r["project_location"] or "",
                     source_domain=r["source_domain"] or "",
                     width=r["width"] or 0,
-                    height=r["height"] or 0
+                    height=r["height"] or 0,
+                    slot_name=r["slot_name"] if "slot_name" in r.keys() else ""
                 ))
 
             return BoardSnapshot(

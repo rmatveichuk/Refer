@@ -32,4 +32,26 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if '--server' in sys.argv:
+        import argparse
+        import os
+        from pathlib import Path
+        from ai.shared_service import InferenceServer
+
+        parser = argparse.ArgumentParser(description="Refer Shared Inference Service")
+        parser.add_argument('--server', action='store_true', help="Run TCP inference server")
+        parser.add_argument('--state-dir', type=Path, default=None, help="Directory for ai_service.json registration")
+        parser.add_argument('--host', type=str, default="127.0.0.1", help="Host interface to bind")
+        parser.add_argument('--port', type=int, default=0, help="Port to bind (0 for dynamic port)")
+        parser.add_argument('--fake-engine', action='store_true', help="Use lightweight mock engine for testing")
+        args, _ = parser.parse_known_args()
+
+        engine = None
+        if args.fake_engine or os.environ.get("REFER_USE_FAKE_ENGINE") == "1":
+            from tests.fake_engine import FakeEngine
+            engine = FakeEngine()
+
+        server = InferenceServer(engine=engine, host=args.host, port=args.port, state_dir=args.state_dir)
+        server.start()
+    else:
+        main()

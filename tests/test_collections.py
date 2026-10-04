@@ -189,6 +189,13 @@ class TestCollections(unittest.TestCase):
         index_html = Path(html_result["entrypoint"]).read_text(encoding="utf-8")
         self.assertIn("Export Board", index_html)
         self.assertIn("Референсы", index_html)
+        self.assertIn("openModal", index_html)
+        self.assertIn("prevImage", index_html)
+        self.assertIn("nextImage", index_html)
+        self.assertIn("nav-btn nav-prev", index_html)
+        self.assertIn("nav-btn nav-next", index_html)
+        self.assertIn("touchstart", index_html)
+        self.assertIn("ArrowLeft", index_html)
 
         # Test Web HTML (Zero Disk Duplication)
         web_export_dir = Path(self.temp_dir) / "project_work_dir"
@@ -209,6 +216,12 @@ class TestCollections(unittest.TestCase):
         self.assertIn("Export Board", web_html_content)
         self.assertIn("openModal", web_html_content)
         self.assertIn("filterCards", web_html_content)
+        self.assertIn("prevImage", web_html_content)
+        self.assertIn("nextImage", web_html_content)
+        self.assertIn("nav-btn nav-prev", web_html_content)
+        self.assertIn("nav-btn nav-next", web_html_content)
+        self.assertIn("touchstart", web_html_content)
+        self.assertIn("ArrowLeft", web_html_content)
 
         # Test sync_collection_web_moodboard
         from export.moodboard_exporter import sync_collection_web_moodboard

@@ -443,7 +443,12 @@ class MainWindow(QMainWindow):
 
     def _on_collection_contents_changed(self):
         if self.current_collection_id is not None:
-            self._update_breadcrumbs()
+            col = self.collection_repo.get_collection(self.current_collection_id)
+            if col:
+                self.result_title.setText(f"Набор: {col['name']}")
+                self._update_breadcrumbs()
+            else:
+                self._on_collection_cleared()
 
     def _quick_add_selected_to_collection(self):
         indexes = self.gallery.selectionModel().selectedIndexes()

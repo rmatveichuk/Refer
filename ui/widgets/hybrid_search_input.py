@@ -38,7 +38,7 @@ class HybridSearchInput(QWidget):
 
         # Drop Zone
         self.drop_zone = DropZoneFrame()
-        self.drop_zone.setFixedHeight(140)
+        self.drop_zone.setFixedHeight(148)
         
         self.drop_layout = QVBoxLayout(self.drop_zone)
         self.drop_layout.setContentsMargins(4, 4, 4, 4)
@@ -47,13 +47,14 @@ class HybridSearchInput(QWidget):
         self.lbl_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_placeholder.setStyleSheet("color: #888; font-size: 13px; border: none; background: transparent;")
 
-# Preview layout to hold both image and button
+        # Preview layout to hold both image and button
         self.preview_layout = QVBoxLayout()
         self.preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_layout.setContentsMargins(0,0,0,0)
+        self.preview_layout.setContentsMargins(0, 0, 0, 0)
+        self.preview_layout.setSpacing(6)
 
         # Container for image and close button
-        self.img_container = QWidget()
+        self.img_container = QWidget(self.drop_zone)
         self.img_container.setFixedSize(100, 100)
         self.img_container.setVisible(False)
         
@@ -76,10 +77,8 @@ class HybridSearchInput(QWidget):
         self.btn_remove_img.clicked.connect(self.clear_image)
         
         self.preview_layout.addWidget(self.img_container)
-        
 
-
-        self.btn_analyze = QPushButton(tr("auto_tags"))
+        self.btn_analyze = QPushButton(tr("auto_tags"), self.drop_zone)
         self.btn_analyze.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_analyze.setStyleSheet("""
             QPushButton {
@@ -96,13 +95,14 @@ class HybridSearchInput(QWidget):
         """)
         self.btn_analyze.setVisible(False)
         self.btn_analyze.clicked.connect(self._on_analyze_clicked)
+        self.preview_layout.addWidget(self.btn_analyze)
 
         self.drop_layout.addStretch()
         self.drop_layout.addWidget(self.lbl_placeholder)
         self.drop_layout.addLayout(self.preview_layout)
         self.drop_layout.addStretch()
 
-# Connect events
+        # Connect events
         self.drop_zone.dragEnterEvent = self._dragEnterEvent
         self.drop_zone.dragLeaveEvent = self._dragLeaveEvent
         self.drop_zone.dropEvent = self._dropEvent
@@ -138,8 +138,14 @@ class HybridSearchInput(QWidget):
 
     def _dragLeaveEvent(self, event):
         self.drop_zone.setStyleSheet("""
-            QFrame { background-color: #1a1a1a; border: 2px dashed #333; border-radius: 8px; }
-            QFrame:hover { border-color: #fff; }
+            QFrame {
+                background-color: #1e1e1e;
+                border: 2px dashed #444;
+                border-radius: 8px;
+            }
+            QFrame:hover {
+                border-color: #fff;
+            }
         """)
 
     def _dropEvent(self, event):
@@ -151,7 +157,6 @@ class HybridSearchInput(QWidget):
         if file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
             event.acceptProposedAction()
             self.set_image(file_path)
-
 
     def _on_analyze_clicked(self):
         if self.image_path:
@@ -176,6 +181,7 @@ class HybridSearchInput(QWidget):
         self.image_path = ""
         self.lbl_preview.clear()
         self.img_container.setVisible(False)
+        self.btn_analyze.setVisible(False)
         self.lbl_placeholder.setVisible(True)
         self.text_input.setPlaceholderText(tr("search_placeholder"))
 

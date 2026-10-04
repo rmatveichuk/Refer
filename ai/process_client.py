@@ -14,11 +14,19 @@ import numpy as np
 
 class AiProcessClient:
     def __init__(self, *, timeout=30, command=None):
+        if command is None:
+            from ai.shared_service import SharedAiClient
+            self._shared = SharedAiClient(timeout=timeout)
+            self.model = self._shared.model
+            self.timeout = timeout
+            return
+
+        self._shared = None
         self.timeout = timeout
         self._lock = Lock()
         self._responses = Queue()
         environment = dict(os.environ, PYTHONIOENCODING='utf-8', HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1')
-        self.process = subprocess.Popen(command or [sys.executable, '-u', '-m', 'ai.inference_service'],
+        self.process = subprocess.Popen(command,
                                         cwd=Path(__file__).resolve().parents[1], env=environment,
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, encoding='utf-8',
@@ -72,24 +80,39 @@ class AiProcessClient:
 
     @property
     def text_token_limit(self):
+        if self._shared:
+            return self._shared.text_token_limit
         return self.model.config.text_config.max_position_embeddings
 
     def get_text_query_info(self, text):
+        if self._shared:
+            return self._shared.get_text_query_info(text)
         return self._request('get_text_query_info', text)
 
     def get_text_embedding(self, text):
+        if self._shared:
+            return self._shared.get_text_embedding(text)
         return np.asarray(self._request('get_text_embedding', text), dtype=np.float32)
 
     def get_image_embedding(self, path):
+        if self._shared:
+            return self._shared.get_image_embedding(path)
         return np.asarray(self._request('get_image_embedding', str(path)), dtype=np.float32)
 
     def get_image_embeddings_batch(self, paths):
+        if self._shared:
+            return self._shared.get_image_embeddings_batch(paths)
         return np.asarray(self._request('get_image_embeddings_batch', [str(path) for path in paths]), dtype=np.float32)
 
     def extract_tags(self, path, vocabulary=None):
+        if self._shared:
+            return self._shared.extract_tags(path, vocabulary)
         return self._request('extract_tags', str(path), vocabulary)
 
     def close(self):
+        if self._shared:
+            self._shared.close()
+            return
         if self.process.poll() is None:
             self.process.terminate()
             try:

@@ -41,6 +41,11 @@ class SearchFilters:
     plants_only: bool = False
     project_id: int | None = None
     author: str | None = None
+    studios: tuple = ()
+    exclude_project_ids: tuple = ()
+    warmth_min: float | None = None
+    warmth_max: float | None = None
+    contrast_max: float | None = None
     collection_id: int | None = None
 
 
@@ -84,9 +89,26 @@ class SearchRepository:
         if filters.project_id is not None:
             conditions.append("a.project_id = ?")
             params.append(filters.project_id)
-        if filters.author:
-            conditions.append("p.author = ?")
-            params.append(filters.author)
+        if filters.studios:
+            placeholders = ",".join("?" for _ in filters.studios)
+            conditions.append(f"LOWER(p.author) IN ({placeholders})")
+            params.extend(s.strip().casefold() for s in filters.studios)
+        elif filters.author:
+            conditions.append("LOWER(p.author) = ?")
+            params.append(filters.author.strip().casefold())
+        if filters.exclude_project_ids:
+            placeholders = ",".join("?" for _ in filters.exclude_project_ids)
+            conditions.append(f"a.project_id NOT IN ({placeholders})")
+            params.extend(filters.exclude_project_ids)
+        if filters.warmth_min is not None:
+            conditions.append("EXISTS (SELECT 1 FROM asset_features af WHERE af.asset_id = a.id AND af.warmth_palette >= ?)")
+            params.append(float(filters.warmth_min))
+        if filters.warmth_max is not None:
+            conditions.append("EXISTS (SELECT 1 FROM asset_features af WHERE af.asset_id = a.id AND af.warmth_palette <= ?)")
+            params.append(float(filters.warmth_max))
+        if filters.contrast_max is not None:
+            conditions.append("EXISTS (SELECT 1 FROM asset_features af WHERE af.asset_id = a.id AND af.global_contrast <= ?)")
+            params.append(float(filters.contrast_max))
         if filters.collection_id is not None:
             conditions.append("EXISTS (SELECT 1 FROM collection_assets ca WHERE ca.asset_id = a.id AND ca.collection_id = ?)")
             params.append(filters.collection_id)
@@ -108,10 +130,20 @@ class SearchRepository:
             placeholders = ",".join("?" for _ in filters.exclude_tags)
             conditions.append(f"NOT EXISTS (SELECT 1 FROM asset_tags at JOIN tags t ON t.id=at.tag_id WHERE at.asset_id=a.id AND t.name IN ({placeholders}))")
             params.extend(filters.exclude_tags)
-        sql = """SELECT a.*, p.title AS project_title, p.author AS project_author, s.domain AS source_domain
-                 FROM assets a LEFT JOIN projects p ON p.id=a.project_id
-                 LEFT JOIN sources s ON s.id=a.source_id WHERE """ + " AND ".join(conditions) + " ORDER BY a.created_at DESC, a.id DESC"
+
         with self.db.get_connection() as conn:
+            has_features = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='asset_features'").fetchone() is not None
+            if has_features:
+                feature_cols = ", af.warmth_palette, af.global_contrast, af.palette_json"
+                feature_join = " LEFT JOIN asset_features af ON af.asset_id=a.id"
+            else:
+                feature_cols = ", NULL AS warmth_palette, NULL AS global_contrast, NULL AS palette_json"
+                feature_join = ""
+
+            sql = f"""SELECT a.*, p.title AS project_title, p.author AS project_author, s.domain AS source_domain{feature_cols}
+                     FROM assets a LEFT JOIN projects p ON p.id=a.project_id
+                     LEFT JOIN sources s ON s.id=a.source_id{feature_join}
+                     WHERE """ + " AND ".join(conditions) + " ORDER BY a.created_at DESC, a.id DESC"
             rows = [dict(row) for row in conn.execute(sql, params).fetchall()]
         hidden = self.visibility.entries()
         ex_set = {normalized_path(e) for e in (filters.excluded_sources or ())}
@@ -171,3 +203,70 @@ class SearchRepository:
             fields = {key: row[key] for key in Asset.__dataclass_fields__ if key in row}
             assets.append(Asset(**fields))
         return assets, total
+
+    def search_candidates(self, filters, text="", vector=None, limit=30, metadata_only=False, max_per_project=1):
+        rows = self.candidates(filters)
+        if not rows:
+            return []
+        by_id = {row["id"]: row for row in rows}
+        query = text.strip().casefold()
+        words = query.split()
+        latin_query = transliterate_ru(query)
+        latin_words = latin_query.split()
+
+        def matches(row):
+            if not query:
+                return False
+            combined = f"{row.get('project_title') or ''} {row.get('project_author') or ''} {ntpath.basename(row.get('local_path') or '')} {row.get('description') or ''}".casefold()
+            if query in combined or latin_query in combined:
+                return True
+            if words and all(w in combined for w in words):
+                return True
+            if latin_words and all(w in combined for w in latin_words):
+                return True
+            return False
+
+        matched = [row["id"] for row in rows if matches(row)]
+        scores_by_id = {}
+
+        if metadata_only:
+            result_ids = matched if query else list(by_id)
+        elif vector is None:
+            if not query:
+                result_ids = list(by_id)
+            else:
+                result_ids = matched
+        else:
+            fetch_k = min(len(rows), max(limit * 20, 500))
+            distances, ids = self.faiss.search(vector, k=fetch_k, valid_ids=list(by_id))
+            scores_by_id = {int(aid): float(dist) for aid, dist in zip(ids, distances) if int(aid) in by_id and np.isfinite(dist)}
+            ranked = [int(aid) for aid in scores_by_id]
+            # Literal metadata matches are an explicit priority
+            result_ids = list(dict.fromkeys(matched + ranked))
+
+        results = []
+        project_counts = {}
+        for aid in result_ids:
+            row = by_id[aid]
+            pid = row.get("project_id") or 0
+            if max_per_project is not None and pid > 0:
+                if project_counts.get(pid, 0) >= max_per_project:
+                    continue
+                project_counts[pid] = project_counts.get(pid, 0) + 1
+
+            results.append({
+                "asset_id": row["id"],
+                "project_id": row.get("project_id"),
+                "project": row.get("project_title") or "Untitled Project",
+                "architect": row.get("project_author") or "Unknown Architect",
+                "source_domain": row.get("source_domain") or "",
+                "thumbnail_path": row.get("thumbnail_path"),
+                "image_path": row.get("local_path") or row.get("thumbnail_path"),
+                "score_l2": scores_by_id.get(row["id"]),
+                "warmth_palette": row.get("warmth_palette"),
+                "global_contrast": row.get("global_contrast")
+            })
+            if len(results) >= limit:
+                break
+
+        return results

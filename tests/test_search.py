@@ -170,6 +170,7 @@ class WindowTests(unittest.TestCase):
         self.store_dir = tempfile.TemporaryDirectory(prefix="refer-store-")
         self.store_path = Path(self.store_dir.name) / "source_groups.json"
         self.patches = [patch("ui.main_window.DatabaseManager", return_value=self.db),
+                        patch("ui.main_window.FaissManager", side_effect=lambda *a, **kw: FaissManager(Path(_test_dir.name) / "window.index", dimension=3)),
                         patch("ui.main_window.SourceGroupStore", side_effect=lambda **kw: SourceGroupStore(db=self.db, store_path=self.store_path)),
                         patch.object(MainWindow, '_start_results_worker', lambda window, worker: worker.run()),
                         patch.object(MainWindow, '_start_ai_worker', lambda window, worker: self.jobs.append(worker)),

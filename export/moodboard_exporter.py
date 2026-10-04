@@ -170,6 +170,7 @@ def export_moodboard(
 
     records = []
     cards_html = []
+    html_items = []
 
     try:
         images_dir = stage_dir / "images"
@@ -275,8 +276,14 @@ def export_moodboard(
                     shutil.copy2(dst, thumb_dest)
 
                 display_title = html.escape(f"{item.author} — {item.title}" if item.author and item.title else item.title or item.author or f"Кадр #{n}")
+                card_index = len(html_items)
+                html_items.append({
+                    "src": quote(rel_img),
+                    "title": display_title,
+                    "num": f"{n:02d}"
+                })
                 cards_html.append(f"""
-                <div class="card" onclick="openModal('{quote(rel_img)}')">
+                <div class="card" data-index="{card_index}" onclick="openModal({card_index})">
                     <div class="img-wrap">
                         <img src="{quote(thumb_rel)}" alt="{display_title}" loading="lazy">
                     </div>
@@ -325,7 +332,8 @@ def export_moodboard(
                 desc_html=desc_html,
                 cards_html="".join(cards_html),
                 date_str=datetime.now().strftime("%d.%m.%Y"),
-                count_str=str(len(records))
+                count_str=str(len(records)),
+                items_json=json.dumps(html_items, ensure_ascii=False)
             )
             with open(stage_dir / "index.html", "w", encoding="utf-8") as f:
                 f.write(html_content)
@@ -351,7 +359,14 @@ def export_moodboard(
         raise
 
 
-def _build_html_template(title: str, desc_html: str, cards_html: str, date_str: str, count_str: str) -> str:
+def _build_html_template(
+    title: str,
+    desc_html: str,
+    cards_html: str,
+    date_str: str,
+    count_str: str,
+    items_json: str = "[]"
+) -> str:
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -449,32 +464,107 @@ def _build_html_template(title: str, desc_html: str, cards_html: str, date_str: 
             inset: 0;
             background: rgba(0, 0, 0, 0.94);
             z-index: 1000;
-            justify-content: center;
+            flex-direction: column;
+            justify-content: space-between;
             align-items: center;
-            padding: 30px;
+            padding: 20px 24px;
+            box-sizing: border-box;
+            user-select: none;
         }}
         #modal.open {{ display: flex; }}
-        #modal-img {{
-            max-width: 95vw;
-            max-height: 92vh;
-            object-fit: contain;
-            border-radius: 4px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        .modal-top-bar {{
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+            padding: 0 10px;
+            max-width: 1600px;
+        }}
+        .modal-counter {{
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: 600;
         }}
         #modal-close {{
-            position: absolute;
-            top: 20px;
-            right: 25px;
-            color: #fff;
-            font-size: 36px;
+            color: #ccc;
+            font-size: 28px;
             cursor: pointer;
-            width: 44px;
-            height: 44px;
+            width: 38px;
+            height: 38px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.08);
+            transition: background 0.18s, color 0.18s;
+        }}
+        #modal-close:hover {{
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }}
+        .modal-center {{
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 0;
+            margin: 10px 0;
+        }}
+        #modal-img {{
+            max-width: 92vw;
+            max-height: 78vh;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.85);
+            user-select: none;
+            -webkit-user-drag: none;
+        }}
+        .nav-btn {{
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(22, 24, 30, 0.75);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff;
+            font-size: 22px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            user-select: none;
+            z-index: 1001;
+        }}
+        .nav-btn:hover {{
+            background: rgba(41, 182, 246, 0.9);
+            border-color: var(--accent);
+            color: #000;
+        }}
+        .nav-prev {{ left: 16px; }}
+        .nav-next {{ right: 16px; }}
+        .modal-bottom-bar {{
+            background: #1a1b1f;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 18px;
+            max-width: 900px;
+            color: var(--text-main);
+            font-size: 13px;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+        @media (max-width: 768px) {{
+            .nav-prev {{ left: 8px; width: 40px; height: 40px; font-size: 18px; }}
+            .nav-next {{ right: 8px; width: 40px; height: 40px; font-size: 18px; }}
+            #modal-img {{ max-height: 72vh; max-width: 96vw; }}
         }}
         /* Print Stylesheet (A4 Landscape Album) */
         @page {{
@@ -521,22 +611,122 @@ def _build_html_template(title: str, desc_html: str, cards_html: str, date_str: 
     </div>
 
     <div id="modal" onclick="closeModal()">
-        <span id="modal-close" onclick="closeModal()">&times;</span>
-        <img id="modal-img" src="" alt="Full view" onclick="event.stopPropagation()">
+        <div class="modal-top-bar" onclick="event.stopPropagation()">
+            <span class="modal-counter" id="modal-counter">1 / 1</span>
+            <span id="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-center">
+            <div class="nav-btn nav-prev" onclick="event.stopPropagation(); prevImage();" title="Предыдущее (←)" aria-label="Предыдущее">&#10094;</div>
+            <img id="modal-img" src="" alt="Full view" onclick="event.stopPropagation()" draggable="false">
+            <div class="nav-btn nav-next" onclick="event.stopPropagation(); nextImage();" title="Следующее (→)" aria-label="Следующее">&#10095;</div>
+        </div>
+        <div class="modal-bottom-bar" id="modal-bottom" onclick="event.stopPropagation()">
+            <span id="modal-caption"></span>
+        </div>
     </div>
 
     <script>
-        function openModal(src) {{
-            const modal = document.getElementById('modal');
-            const img = document.getElementById('modal-img');
-            img.src = src;
-            modal.classList.add('open');
+        const items = {items_json};
+        let currentIndex = 0;
+
+        function openModal(param) {{
+            if (typeof param === 'number') {{
+                if (param < 0 || param >= items.length) return;
+                currentIndex = param;
+            }} else if (typeof param === 'string') {{
+                const idx = items.findIndex(it => it.src === param);
+                currentIndex = idx >= 0 ? idx : 0;
+            }}
+            updateModal();
+            document.getElementById('modal').classList.add('open');
+            document.body.style.overflow = 'hidden';
         }}
+
         function closeModal() {{
             document.getElementById('modal').classList.remove('open');
+            document.body.style.overflow = '';
         }}
+
+        function prevImage() {{
+            if (!items.length) return;
+            currentIndex = (currentIndex - 1 + items.length) % items.length;
+            updateModal();
+        }}
+
+        function nextImage() {{
+            if (!items.length) return;
+            currentIndex = (currentIndex + 1) % items.length;
+            updateModal();
+        }}
+
+        function updateModal() {{
+            const it = items[currentIndex];
+            if (!it) return;
+            const img = document.getElementById('modal-img');
+            img.src = it.src;
+            const counter = document.getElementById('modal-counter');
+            if (counter) counter.textContent = (currentIndex + 1) + ' / ' + items.length;
+            const caption = document.getElementById('modal-caption');
+            if (caption) caption.textContent = it.title || '';
+        }}
+
         document.addEventListener('keydown', (e) => {{
+            const modal = document.getElementById('modal');
+            if (!modal.classList.contains('open')) return;
             if (e.key === 'Escape') closeModal();
+            else if (e.key === 'ArrowLeft') prevImage();
+            else if (e.key === 'ArrowRight') nextImage();
+        }});
+
+        // Touch & mouse swipe navigation (left / right)
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isMouseDown = false;
+        const modalEl = document.getElementById('modal');
+
+        modalEl.addEventListener('touchstart', (e) => {{
+            if (e.changedTouches && e.changedTouches.length > 0) {{
+                touchStartX = e.changedTouches[0].clientX;
+                touchStartY = e.changedTouches[0].clientY;
+            }}
+        }}, {{ passive: true }});
+
+        modalEl.addEventListener('touchend', (e) => {{
+            if (!modalEl.classList.contains('open')) return;
+            if (e.changedTouches && e.changedTouches.length > 0) {{
+                const diffX = e.changedTouches[0].clientX - touchStartX;
+                const diffY = e.changedTouches[0].clientY - touchStartY;
+                if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {{
+                    if (diffX > 0) {{
+                        prevImage();
+                    }} else {{
+                        nextImage();
+                    }}
+                }}
+            }}
+        }}, {{ passive: true }});
+
+        modalEl.addEventListener('mousedown', (e) => {{
+            if (e.button === 0) {{
+                isMouseDown = true;
+                touchStartX = e.clientX;
+                touchStartY = e.clientY;
+            }}
+        }});
+
+        modalEl.addEventListener('mouseup', (e) => {{
+            if (!isMouseDown) return;
+            isMouseDown = false;
+            if (!modalEl.classList.contains('open')) return;
+            const diffX = e.clientX - touchStartX;
+            const diffY = e.clientY - touchStartY;
+            if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY)) {{
+                if (diffX > 0) {{
+                    prevImage();
+                }} else {{
+                    nextImage();
+                }}
+            }}
         }});
     </script>
 </body>
@@ -1161,9 +1351,9 @@ def _build_web_html_template(
             <span class="modal-close-btn" onclick="closeModal()">&times;</span>
         </div>
         <div class="modal-center">
-            <div class="nav-btn nav-prev" onclick="event.stopPropagation(); prevImage();">&#10094;</div>
-            <img id="modal-img" src="" alt="Full view" onclick="event.stopPropagation()">
-            <div class="nav-btn nav-next" onclick="event.stopPropagation(); nextImage();">&#10095;</div>
+            <div class="nav-btn nav-prev" onclick="event.stopPropagation(); prevImage();" title="Предыдущее (←)" aria-label="Предыдущее">&#10094;</div>
+            <img id="modal-img" src="" alt="Full view" onclick="event.stopPropagation()" draggable="false">
+            <div class="nav-btn nav-next" onclick="event.stopPropagation(); nextImage();" title="Следующее (→)" aria-label="Следующее">&#10095;</div>
         </div>
         <div class="modal-bottom-bar" onclick="event.stopPropagation()">
             <div class="modal-info">
@@ -1265,6 +1455,57 @@ def _build_web_html_template(
             if (e.key === 'Escape') closeModal();
             else if (e.key === 'ArrowLeft') prevImage();
             else if (e.key === 'ArrowRight') nextImage();
+        }});
+
+        // Touch & mouse swipe navigation (left / right)
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isMouseDown = false;
+        const modalEl = document.getElementById('modal');
+
+        modalEl.addEventListener('touchstart', (e) => {{
+            if (e.changedTouches && e.changedTouches.length > 0) {{
+                touchStartX = e.changedTouches[0].clientX;
+                touchStartY = e.changedTouches[0].clientY;
+            }}
+        }}, {{ passive: true }});
+
+        modalEl.addEventListener('touchend', (e) => {{
+            if (!modalEl.classList.contains('open')) return;
+            if (e.changedTouches && e.changedTouches.length > 0) {{
+                const diffX = e.changedTouches[0].clientX - touchStartX;
+                const diffY = e.changedTouches[0].clientY - touchStartY;
+                if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {{
+                    if (diffX > 0) {{
+                        prevImage();
+                    }} else {{
+                        nextImage();
+                    }}
+                }}
+            }}
+        }}, {{ passive: true }});
+
+        modalEl.addEventListener('mousedown', (e) => {{
+            if (e.button === 0) {{
+                isMouseDown = true;
+                touchStartX = e.clientX;
+                touchStartY = e.clientY;
+            }}
+        }});
+
+        modalEl.addEventListener('mouseup', (e) => {{
+            if (!isMouseDown) return;
+            isMouseDown = false;
+            if (!modalEl.classList.contains('open')) return;
+            const diffX = e.clientX - touchStartX;
+            const diffY = e.clientY - touchStartY;
+            if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY)) {{
+                if (diffX > 0) {{
+                    prevImage();
+                }} else {{
+                    nextImage();
+                }}
+            }}
         }});
     </script>
 </body>
