@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QToolButton,
     QLabel, QCheckBox, QFrame, QScrollArea, QTreeWidget, QTreeWidgetItem, QMenu, QComboBox, QLineEdit
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QSettings
+from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QSettings, QSize, QPointF
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter
 import os
 import ntpath
 
@@ -16,6 +17,58 @@ import config
 from database.db_manager import DatabaseManager
 from database.collection_repository import CollectionRepository
 from ui.widgets.collections_panel import CollectionsPanel
+
+
+def _create_dots_icon(color: str, size: int = 32) -> QIcon:
+    """Создаёт три чистые векторные круглые точки, идеально центрированные."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QColor(color))
+    p.setPen(Qt.PenStyle.NoPen)
+    cx, cy = size / 2.0, size / 2.0
+    r = 2.4
+    spacing = 6.5
+    p.drawEllipse(QPointF(cx - spacing, cy), r, r)
+    p.drawEllipse(QPointF(cx, cy), r, r)
+    p.drawEllipse(QPointF(cx + spacing, cy), r, r)
+    p.end()
+    return QIcon(pix)
+
+
+class HeaderDotsButton(QPushButton):
+    """Кнопка дополнительных действий с векторным троеточием и отзывчивым ховером."""
+
+    def __init__(self, tooltip: str = "", parent=None):
+        super().__init__(parent)
+        self._normal_icon = _create_dots_icon("#9aa0a6", 32)
+        self._hover_icon = _create_dots_icon("#29b6f6", 32)
+        self.setFixedSize(28, 28)
+        self.setIconSize(QSize(20, 20))
+        self.setIcon(self._normal_icon)
+        self.setToolTip(tooltip)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #383c45;
+                border-radius: 5px;
+                padding: 0;
+            }
+            QPushButton:hover {
+                background-color: #24272e;
+                border-color: #29b6f6;
+            }
+        """)
+
+    def enterEvent(self, event):
+        self.setIcon(self._hover_icon)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setIcon(self._normal_icon)
+        super().leaveEvent(event)
 
 
 class TagBubble(QFrame):
@@ -246,26 +299,10 @@ class SearchPanel(QWidget):
         self.lbl_sources = QLabel(tr("sources"))
         sources_header.addWidget(self.lbl_sources, 1)
 
-        self.btn_catalogs = QPushButton("⋯")
-        self.btn_catalogs.setFixedSize(26, 26)
-        self.btn_catalogs.setToolTip("Управление каталогами, папками и сайтами")
-        self.btn_catalogs.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #9aa0a6;
-                border: 1px solid #333;
-                border-radius: 4px;
-                font-size: 16px;
-                font-weight: bold;
-                padding-bottom: 4px;
-                line-height: 1;
-            }
-            QPushButton:hover {
-                background-color: #24272e;
-                color: #29b6f6;
-                border-color: #29b6f6;
-            }
-        """)
+        self.btn_catalogs = HeaderDotsButton(
+            tooltip="Управление каталогами, папками и сайтами",
+            parent=self
+        )
         self.btn_catalogs.clicked.connect(self.catalogs_requested.emit)
         sources_header.addWidget(self.btn_catalogs)
         main_layout.addLayout(sources_header)

@@ -63,6 +63,24 @@ def _create_cross_icon(color: str, size: int = 32) -> QIcon:
     return QIcon(pix)
 
 
+def _create_plus_icon(color: str, size: int = 32) -> QIcon:
+    """Создаёт аккуратный геометрический плюс без зависимости от шрифта."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(color))
+    pen.setWidthF(2.4)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    cx, cy = size / 2.0, size / 2.0
+    d = size * 0.24
+    p.drawLine(QPointF(cx - d, cy), QPointF(cx + d, cy))
+    p.drawLine(QPointF(cx, cy - d), QPointF(cx, cy + d))
+    p.end()
+    return QIcon(pix)
+
+
 class ActionButton(QPushButton):
     """Инлайн-кнопка действия с чистой векторной иконкой и подсветкой при наведении."""
 
@@ -383,23 +401,24 @@ class CollectionsPanel(QWidget):
         title.setFont(title_font)
         title.setStyleSheet("color: #8e949e; letter-spacing: 0.5px;")
 
-        self.btn_create = QPushButton("+")
-        self.btn_create.setFixedSize(24, 24)
-        self.btn_create.setToolTip("Создать новый мудборд под проект")
+        self.btn_create = ActionButton(
+            normal_icon=_create_plus_icon("#d0d4dc", 32),
+            hover_icon=_create_plus_icon("#ffffff", 32),
+            tooltip="Создать новый мудборд под проект",
+            parent=self
+        )
+        self.btn_create.setFixedSize(28, 28)
+        self.btn_create.setIconSize(QSize(18, 18))
         self.btn_create.setStyleSheet("""
             QPushButton {
                 background-color: #24272e;
-                color: #e0e0e0;
-                font-weight: bold;
-                font-size: 15px;
                 border: 1px solid #383c45;
-                border-radius: 4px;
-                padding-bottom: 2px;
+                border-radius: 5px;
+                padding: 0;
             }
             QPushButton:hover {
                 background-color: #1976D2;
                 border-color: #2196F3;
-                color: #fff;
             }
         """)
         self.btn_create.clicked.connect(self._on_create_clicked)
