@@ -187,8 +187,10 @@ class ImageViewerWindow(QMainWindow):
         self.btn_ai.clicked.connect(self._trigger_ai_analysis)
         toolbar.addWidget(self.btn_ai)
 
-        self.btn_delete = QPushButton("Скрыть из библиотеки")
+        self.btn_delete = QPushButton("🗑 Скрыть")
+        self.btn_delete.setToolTip("Скрыть из библиотеки (Delete)")
         self.btn_delete.setStyleSheet("""
+            QPushButton { color: #ff6b6b; font-weight: bold; }
             QPushButton:hover { background-color: #a83232; color: white; border-color: #cc4444; }
         """)
         self.btn_delete.setShortcut(QKeySequence(Qt.Key.Key_Delete))
@@ -424,8 +426,8 @@ class ImageViewerWindow(QMainWindow):
         
         if hasattr(self.parent_window, "_delete_assets_batch"):
             if self.parent_window._delete_assets_batch([asset]):
-                # Remove from local list and move to next or previous
-                self.assets.pop(self.current_index)
+                if asset in self.assets:
+                    self.assets.remove(asset)
                 if not self.assets:
                     self.close()
                 else:
@@ -461,6 +463,8 @@ class ImageViewerWindow(QMainWindow):
             self.viewer.zoom_out()
         elif event.key() == Qt.Key.Key_U:
             self._open_in_browser()
+        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self._delete_current_asset()
         else:
             super().keyPressEvent(event)
 

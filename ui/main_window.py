@@ -40,6 +40,11 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
+    scraping_state_changed = pyqtSignal(bool)
+
+    def _set_scraping_state(self, is_scraping: bool):
+        self.top_toolbar.set_scraping_state(is_scraping)
+        self.scraping_state_changed.emit(is_scraping)
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Refer — AI Asset Manager")
@@ -376,16 +381,100 @@ class MainWindow(QMainWindow):
             return False
         if not rows:
             return False
-        reply = QMessageBox.question(self, "Скрыть изображения",
-            f"Скрыть {len(rows)} изображений из библиотеки?\n\nВернуть их можно через «Каталоги → Скрытые изображения». Файлы, теги и избранное сохраняются.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-        if reply != QMessageBox.StandardButton.Yes:
+
+        parent_window = QApplication.activeWindow() or self
+        msg_box = QMessageBox(parent_window)
+        msg_box.setIcon(QMessageBox.Icon.Question)
+
+        n = len(rows)
+        if config.CURRENT_LANGUAGE == "ru":
+            msg_box.setWindowTitle("Скрыть изображения")
+            if 11 <= (n % 100) <= 19:
+                count_str = f"{n} изображений"
+            elif n % 10 == 1:
+                count_str = f"{n} изображение"
+            elif 2 <= (n % 10) <= 4:
+                count_str = f"{n} изображения"
+            else:
+                count_str = f"{n} изображений"
+            msg_box.setText(
+                f"Скрыть {count_str} из библиотеки?\n\n"
+                "Вернуть их можно через «Каталоги → Скрытые изображения». Файлы, теги и избранное сохраняются."
+            )
+            yes_btn = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
+            no_btn = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+        else:
+            msg_box.setWindowTitle("Hide Images")
+            count_str = f"{n} image" if n == 1 else f"{n} images"
+            msg_box.setText(
+                f"Hide {count_str} from library?\n\n"
+                "You can restore them via Catalogs → Hidden Images. Files, tags, and favorites are preserved."
+            )
+            yes_btn = msg_box.addButton("Yes", QMessageBox.ButtonRole.YesRole)
+            no_btn = msg_box.addButton("No", QMessageBox.ButtonRole.NoRole)
+
+        yes_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976D2;
+                color: #ffffff;
+                font-weight: bold;
+                border: 1px solid #2196F3;
+                border-radius: 4px;
+                padding: 6px 20px;
+                min-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #1565C0;
+            }
+            QPushButton:focus {
+                border: 2px solid #90CAF9;
+            }
+        """)
+        no_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2e2e2e;
+                color: #cccccc;
+                border: 1px solid #444444;
+                border-radius: 4px;
+                padding: 6px 20px;
+                min-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #3e3e3e;
+            }
+        """)
+
+        msg_box.setDefaultButton(yes_btn)
+        msg_box.setEscapeButton(no_btn)
+        yes_btn.setFocus()
+
+        msg_box.exec()
+        if msg_box.clickedButton() != yes_btn:
             return False
         try:
             self.visibility.hide(rows)
         except Exception as error:
             QMessageBox.critical(self, "Скрытие не выполнено", str(error))
             return False
+
+        # Мгновенно удаляем скрытые ассеты из памяти модели галереи и таблицы библиотеки
+        hidden_ids = set(ids)
+        current_assets = [a for a in self.gallery_model.assets if a.id not in hidden_ids]
+        self.gallery_model.setAssets(current_assets)
+        self._refresh_library()
+        self.result_count.setText(f"Показано {len(current_assets)}")
+
+        # Если открыт просмотрщик, убираем удалённые ассеты и из него
+        if hasattr(self, 'gallery') and self.gallery._viewer_window and self.gallery._viewer_window.isVisible():
+            viewer = self.gallery._viewer_window
+            viewer.assets = [a for a in viewer.assets if a.id not in hidden_ids]
+            if not viewer.assets:
+                viewer.close()
+            else:
+                if viewer.current_index >= len(viewer.assets):
+                    viewer.current_index = len(viewer.assets) - 1
+                viewer._load_full_image()
+
         self._load_assets_for_gallery()
         self.status_label.setText(f"Скрыто изображений: {len(rows)}. Восстановление — «Каталоги → Скрытые изображения».")
         return True
@@ -531,7 +620,7 @@ class MainWindow(QMainWindow):
                 self.group_store.save()
             except Exception:
                 pass
-        self.top_toolbar.set_scraping_state(True)
+        self._set_scraping_state(True)
         self.status_label.setText("Сканирование: " + options["path"])
         self.progress_bar.show()
         self.progress_bar.setRange(0, 0)
@@ -803,7 +892,7 @@ class MainWindow(QMainWindow):
     def start_scrape(self, parser_name: str, url: str):
         if not url:
             QMessageBox.warning(self, "Ошибка", "Укажите URL для парсинга!")
-            self.top_toolbar.set_scraping_state(False)
+            self._set_scraping_state(False)
             return
 
         if "behance" in url.lower():
@@ -815,10 +904,11 @@ class MainWindow(QMainWindow):
 
         if not parser_class:
             QMessageBox.warning(self, "Ошибка", "Неподдерживаемый сайт. Укажите Behance или ArchDaily URL.")
-            self.top_toolbar.set_scraping_state(False)
+            self._set_scraping_state(False)
             return
 
-        self.top_toolbar.set_scraping_state(True)
+        self._set_scraping_state(True)
+        self._scraped_count = 0
         self.status_label.setText(f"Скрапинг: {url.split('/')[-1]}")
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0) # indeterminate
@@ -834,12 +924,14 @@ class MainWindow(QMainWindow):
         if self.active_scraper:
             self.active_scraper.cancel()
             self.active_scraper = None
-        self.top_toolbar.set_scraping_state(False)
+        self._set_scraping_state(False)
         self.status_label.setText("Остановлено")
         self.progress_bar.setVisible(False)
 
     @pyqtSlot(object)
     def on_new_asset(self, asset):
+        self._scraped_count = getattr(self, '_scraped_count', 0) + 1
+        self.status_label.setText(f"Загрузка: {self._scraped_count} изображений...")
         current_assets = self.gallery_model.assets.copy()
         current_assets.insert(0, asset)
         self.gallery_model.setAssets(current_assets)
@@ -848,8 +940,9 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_scrape_finished(self, url):
         self.active_scraper = None
-        self.top_toolbar.set_scraping_state(False)
-        self.status_label.setText("Готово")
+        self._set_scraping_state(False)
+        count = getattr(self, '_scraped_count', 0)
+        self.status_label.setText(f"✅ Загрузка завершена: добавлено {count} изображений")
         self.progress_bar.setVisible(False)
         self._refresh_library()
         self.update_sources_panel()
@@ -858,7 +951,7 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str, str)
     def on_scrape_error(self, url, error):
         self.active_scraper = None
-        self.top_toolbar.set_scraping_state(False)
+        self._set_scraping_state(False)
         self.status_label.setText("Ошибка скрапинга")
         self.progress_bar.setVisible(False)
         QMessageBox.warning(self, "Ошибка", f"Скрапер завершился с ошибкой: {error}")

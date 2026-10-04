@@ -58,13 +58,21 @@ class BehanceParser:
         self.db_path = db_path
         self._is_cancelled = False
         
-        # Настраиваем сессию и заголовки для обхода блокировок
+        # Настраиваем сессию и современные заголовки Chrome для обхода WAF/Varnish
         self.session = requests.Session()
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
+            "authority": "www.behance.net",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "accept-language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+            "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-site": "none",
+            "sec-fetch-user": "?1",
+            "upgrade-insecure-requests": "1",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         }
 
         # Определяем, является ли ввод поисковым запросом или готовым URL
@@ -98,26 +106,39 @@ class BehanceParser:
             return None
 
         try:
-            res = self.session.get(url, impersonate="chrome110", headers=self.headers, timeout=15)
+            res = self.session.get(url, impersonate="chrome124", headers=self.headers, timeout=15)
             
-            # Проверка JS cookie-челленджа
-            match = re.search(r'document\.cookie\s*=\s*"js_challenge_value=([^"]+)"', res.text)
+            # Проверка JS cookie-челленджа (может возвращаться со статусом 200 или 403)
+            match = re.search(r'document\.cookie\s*=\s*"js_challenge_value=([^";]+)', res.text)
             if match:
-                cookie_val = match.group(1)
+                cookie_val = match.group(1).strip()
                 logger.info("Solving Behance JS cookie challenge...")
                 self.session.cookies.set("js_challenge_value", cookie_val, domain=".behance.net", path="/")
                 
                 # Повторный запрос с кукой
-                res = self.session.get(url, impersonate="chrome110", headers=self.headers, timeout=15)
+                res = self.session.get(url, impersonate="chrome124", headers=self.headers, timeout=15)
 
             if res.status_code == 200:
                 return res.text
+            elif res.status_code == 429:
+                logger.error(f"Behance rate limit exceeded (HTTP 429) for {url}")
+                raise RuntimeError(
+                    "Behance временно ограничил запросы (HTTP 429: Too Many Requests).\n"
+                    "Adobe блокирует частые обращения. Подождите некоторое время или смените IP/VPN."
+                )
+            elif res.status_code == 403:
+                logger.error(f"Behance access forbidden (HTTP 403) for {url}")
+                raise RuntimeError(
+                    f"Behance отклонил запрос (HTTP 403 Forbidden).\n"
+                    f"Доступ заблокирован защитой сайта."
+                )
             else:
                 logger.warning(f"Failed to fetch page {url}: Status {res.status_code}")
-                return None
+                raise RuntimeError(f"Ошибка загрузки страницы Behance (HTTP {res.status_code}): {url}")
         except Exception as e:
-            logger.error(f"Error fetching page {url}: {e}")
-            return None
+            if not isinstance(e, RuntimeError):
+                logger.error(f"Error fetching page {url}: {e}")
+            raise
 
     def _parse_state(self, html: str) -> Optional[dict]:
         """
@@ -316,6 +337,8 @@ class BehanceParser:
             state = self._parse_state(html)
             if not state:
                 logger.warning(f"Could not parse state for profile URL: {current_url}")
+                if projects_scraped == 0:
+                    raise RuntimeError(f"Не удалось извлечь структуру профиля {username}. Возможно, формат страницы изменился.")
                 break
                 
             try:
@@ -324,10 +347,14 @@ class BehanceParser:
                 page_info = work_section.get('user', {}).get('profileProjects', {}).get('pageInfo', {})
             except KeyError as e:
                 logger.warning(f"KeyError while parsing profile state: {e}")
+                if projects_scraped == 0:
+                    raise RuntimeError(f"Не удалось прочитать проекты в профиле {username}: {e}")
                 break
                 
             if not profile_projects:
                 logger.info("No projects found on this profile page.")
+                if projects_scraped == 0:
+                    raise RuntimeError(f"В профиле автора '{username}' не найдено ни одного проекта.")
                 break
                 
             project_ids = [str(p['id']) for p in profile_projects]
@@ -342,8 +369,15 @@ class BehanceParser:
                     
                 logger.info(f"Fetching project {projects_scraped + 1} (ID: {pid})")
                 time.sleep(1)  # Задержка вежливости
-                self._scrape_single_project(pid, author=username)
-                projects_scraped += 1
+                try:
+                    self._scrape_single_project(pid, author=username)
+                    projects_scraped += 1
+                except RuntimeError as e:
+                    if "429" in str(e) or "403" in str(e):
+                        raise
+                    logger.warning(f"Error scraping project {pid}: {e}")
+                except Exception as e:
+                    logger.warning(f"Error scraping project {pid}: {e}")
                 
             # Проверяем пагинацию
             if page_info.get('hasNextPage') and page_info.get('endCursor'):
@@ -370,6 +404,8 @@ class BehanceParser:
             state = self._parse_state(html)
             if not state:
                 logger.warning(f"Could not parse state for search URL: {current_url}")
+                if projects_scraped == 0:
+                    raise RuntimeError("Не удалось прочитать структуру страницы поиска Behance.")
                 break
                 
             try:
@@ -378,10 +414,14 @@ class BehanceParser:
                 page_info = search_data.get('pageInfo', {})
             except KeyError as e:
                 logger.warning(f"KeyError while parsing search state: {e}")
+                if projects_scraped == 0:
+                    raise RuntimeError(f"Не удалось распарсить поисковую выдачу: {e}")
                 break
                 
             if not nodes:
                 logger.info("No projects found on this search page.")
+                if projects_scraped == 0:
+                    raise RuntimeError(f"По данному запросу ничего не найдено на Behance.")
                 break
                 
             project_ids = []
@@ -401,8 +441,15 @@ class BehanceParser:
                     
                 logger.info(f"Fetching search result project {projects_scraped + 1} (ID: {pid})")
                 time.sleep(1)  # Задержка вежливости
-                self._scrape_single_project(pid)
-                projects_scraped += 1
+                try:
+                    self._scrape_single_project(pid)
+                    projects_scraped += 1
+                except RuntimeError as e:
+                    if "429" in str(e) or "403" in str(e):
+                        raise
+                    logger.warning(f"Error scraping project {pid}: {e}")
+                except Exception as e:
+                    logger.warning(f"Error scraping project {pid}: {e}")
                 
             # Проверяем пагинацию
             if page_info.get('hasNextPage') and page_info.get('endCursor'):

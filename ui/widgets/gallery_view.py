@@ -84,25 +84,17 @@ class GalleryDelegate(QStyledItemDelegate):
         painter.setFont(font)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
+    def get_delete_button_rect(self, rect):
+        top_right_x = rect.right() - 8 - self.btn_size
+        top_right_y = rect.top() + 8
+        return QRectF(top_right_x, top_right_y, self.btn_size, self.btn_size)
+
     def editorEvent(self, event, model, option, index):
-        """Перехват кликов по иконкам, чтобы не срабатывало выделение/открытие."""
+        """Перехват кликов по иконкам, чтобы не срабатывало стандартное поведение ячейки."""
         if event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
-            asset = index.data(Qt.ItemDataRole.UserRole)
-            if not asset:
-                return False
-
-            top_right_x = option.rect.right() - 8 - self.btn_size
-            top_right_y = option.rect.top() + 8
-            del_rect = QRectF(top_right_x, top_right_y, self.btn_size, self.btn_size)
-            pos = event.position()
-            
-            if del_rect.contains(pos):
-                if event.type() == QEvent.Type.MouseButtonRelease:
-                    view = self.parent()
-                    if hasattr(view, '_delete_asset'):
-                        view._delete_asset(asset)
+            del_rect = self.get_delete_button_rect(option.rect)
+            if del_rect.adjusted(-4, -4, 4, 4).contains(event.position()):
                 return True
-
         return super().editorEvent(event, model, option, index)
 
     def sizeHint(self, option, index):
@@ -167,6 +159,51 @@ class GalleryView(QListView):
         self._viewer_window: ImageViewerWindow | None = None
         self.db = None
         self.parent_window = None
+        self._delete_pressed_index = None
+        self._delete_in_progress = False
+
+    def _get_delete_button_rect(self, index: QModelIndex):
+        if not index.isValid():
+            return None
+        rect = self.visualRect(index)
+        delegate = self.itemDelegate()
+        if hasattr(delegate, 'get_delete_button_rect'):
+            return delegate.get_delete_button_rect(rect)
+        return QRectF(rect.right() - 8 - 28, rect.top() + 8, 28, 28)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position()
+            index = self.indexAt(pos.toPoint())
+            del_rect = self._get_delete_button_rect(index)
+            if del_rect and del_rect.adjusted(-4, -4, 4, 4).contains(pos):
+                self._delete_pressed_index = index
+                event.accept()
+                return
+        self._delete_pressed_index = None
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and getattr(self, '_delete_pressed_index', None) is not None:
+            pressed_index = self._delete_pressed_index
+            self._delete_pressed_index = None
+            pos = event.position()
+            index = self.indexAt(pos.toPoint())
+            del_rect = self._get_delete_button_rect(pressed_index)
+            # Если отпустили на кнопке корзины или в пределах того же элемента
+            if del_rect and (del_rect.adjusted(-6, -6, 6, 6).contains(pos) or (index.isValid() and index.row() == pressed_index.row())):
+                asset = pressed_index.data(Qt.ItemDataRole.UserRole)
+                if asset:
+                    self._delete_in_progress = True
+                    try:
+                        self._delete_asset(asset)
+                    finally:
+                        self._delete_in_progress = False
+                event.accept()
+                return
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def setModel(self, model: AssetListModel):
         old_model = self.model()
@@ -215,7 +252,7 @@ class GalleryView(QListView):
     @pyqtSlot(QModelIndex)
     def _on_item_clicked(self, index: QModelIndex):
         """Open the viewer from a plain click, Space or the context menu."""
-        if not index.isValid():
+        if not index.isValid() or getattr(self, '_delete_in_progress', False) or getattr(self, '_delete_pressed_index', None) is not None:
             return
 
         # Если зажаты Shift или Ctrl, мы просто выделяем объекты, не открывая просмотрщик
@@ -244,6 +281,22 @@ class GalleryView(QListView):
             self._on_item_clicked(self.currentIndex())
             event.accept()
             return
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            model = self.model()
+            if isinstance(model, AssetListModel):
+                selected_indexes = self.selectionModel().selectedIndexes()
+                if selected_indexes:
+                    selected_assets = [model.assets[idx.row()] for idx in selected_indexes if idx.row() < len(model.assets)]
+                    if selected_assets:
+                        self._delete_assets(selected_assets)
+                        event.accept()
+                        return
+                elif self.currentIndex().isValid():
+                    idx = self.currentIndex().row()
+                    if 0 <= idx < len(model.assets):
+                        self._delete_asset(model.assets[idx])
+                        event.accept()
+                        return
         super().keyPressEvent(event)
 
     def set_thumbnail_size(self, size):

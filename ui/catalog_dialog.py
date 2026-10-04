@@ -184,6 +184,10 @@ class CatalogDialog(QDialog):
         self._init_ui()
         self._populate_tree()
 
+        if self.main_window and hasattr(self.main_window, "scraping_state_changed"):
+            self.main_window.scraping_state_changed.connect(self.set_scraping_state)
+            self.set_scraping_state(bool(getattr(self.main_window, "active_scraper", None)))
+
     def _init_data(self):
         with self.db.get_connection() as conn:
             rows = conn.execute("SELECT domain FROM sources ORDER BY domain").fetchall()
@@ -813,38 +817,39 @@ class CatalogDialog(QDialog):
             else:
                 subprocess.Popen(["xdg-open", path])
 
+    def set_scraping_state(self, is_scraping: bool):
+        if is_scraping:
+            self.btn_web_scrape.setText("Остановить")
+            self.btn_web_scrape.setStyleSheet("background-color: #552222; color: #ff8888;")
+            self.web_url_input.setEnabled(False)
+        else:
+            self.btn_web_scrape.setText("Начать загрузку")
+            self.btn_web_scrape.setStyleSheet("")
+            self.web_url_input.setEnabled(True)
+            self._init_data()
+            self._populate_tree()
+
     def _toggle_web_import(self):
         self.web_import_widget.setVisible(not self.web_import_widget.isVisible())
         if self.web_import_widget.isVisible():
             self.web_url_input.setFocus()
-            # If main window is scraping, reflect state
-            if self.main_window and getattr(self.main_window, "active_scraper", None):
-                self.btn_web_scrape.setText("Остановить")
-                self.btn_web_scrape.setStyleSheet("background-color: #552222; color: #ff8888;")
-                self.web_url_input.setEnabled(False)
-            else:
-                self.btn_web_scrape.setText("Начать загрузку")
-                self.btn_web_scrape.setStyleSheet("")
-                self.web_url_input.setEnabled(True)
+            is_scraping = bool(self.main_window and getattr(self.main_window, "active_scraper", None))
+            self.set_scraping_state(is_scraping)
 
     def _on_web_scrape_clicked(self):
         if not self.main_window:
             return
         if getattr(self.main_window, "active_scraper", None):
             self.main_window.stop_scrape()
-            self.btn_web_scrape.setText("Начать загрузку")
-            self.btn_web_scrape.setStyleSheet("")
-            self.web_url_input.setEnabled(True)
+            self.set_scraping_state(False)
         else:
             url = self.web_url_input.text().strip()
             if not url:
                 QMessageBox.information(self, "Ссылка", "Введите ссылку на проект для импорта.")
                 return
             parser = self.web_parser_combo.currentText()
+            self.set_scraping_state(True)
             self.main_window.start_scrape(parser, url)
-            self.btn_web_scrape.setText("Остановить")
-            self.btn_web_scrape.setStyleSheet("background-color: #552222; color: #ff8888;")
-            self.web_url_input.setEnabled(False)
 
     def _open_hidden_assets(self):
         if self.main_window:

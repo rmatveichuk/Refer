@@ -5,6 +5,18 @@ from ui.main_window import MainWindow
 from ui.setup_wizard import SetupWizard
 import config
 
+# Настройка кодировки консоли на Windows
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(levelname)s | %(name)s | %(message)s')
 logger = logging.getLogger("Refer")
